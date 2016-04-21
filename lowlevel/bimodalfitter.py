@@ -3,10 +3,10 @@
 
 """ Module based on virtualfitter to fit bimodal distributions. Does not have to be a step """
 
-import numpy         as np
-from scipy       import stats
+import numpy        as np
+from scipy          import stats
 
-from .tools         import kwargs_update
+from ..utils.tools  import kwargs_update
 from .virtualfitter import ScipyMinuitFitter,VirtualFitter
 
 """
@@ -301,17 +301,12 @@ class ModelBinormal( ScipyMinuitFitter ):
 # ==  Plot Class          == #
 # ========================== #
 # ========================== #
-"""
-class PlotStep( pb.Plot3Axes ):
-    cmap = get_mrearth(False)
-    
-                  
-    def __init__(self,stepObject):
-        super(PlotStep,self).__init__()
-        self.obj = stepObject
-        self.change_cmap(self.cmap)
-        
+
+class PlotData():
+
     def change_cmap(self,cmap):
+        """
+        """
         self.cmap=cmap
         self.default_scatter_kwargs  = kwargs_update(self.default_scatter_kwargs,
                                                     **{"cmap":self.cmap})
@@ -331,11 +326,6 @@ class PlotStep( pb.Plot3Axes ):
                  rangey=None,rangex=None,
                  ybihist = True,xbins=10,ybins=10,
                  **kwargs):
-
-        if catch_names and self.obj.names is None:
-            print "WARNING, you can not use name_catcher. No names defined"
-        else:
-            print "NAME CATCHER NOT READY YET"
             
         ValueX    = eval("self.obj.%s"%key)
         ValueXerr = eval("self.obj.%s"%dkey) if dkey is not None else None
@@ -455,6 +445,3 @@ class PlotStep( pb.Plot3Axes ):
         if self.axhisty is not None:
             self.axhisty.set_ylim(self.ax.get_ylim())
 
-        
-
-"""
