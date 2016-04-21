@@ -303,21 +303,15 @@ class ModelBinormal( ScipyMinuitFitter ):
 # ========================== #
 """
 class PlotStep( pb.Plot3Axes ):
-    """
-    """
     cmap = get_mrearth(False)
     
                   
     def __init__(self,stepObject):
-        """
-        """
         super(PlotStep,self).__init__()
         self.obj = stepObject
         self.change_cmap(self.cmap)
         
     def change_cmap(self,cmap):
-        """
-        """
         self.cmap=cmap
         self.default_scatter_kwargs  = kwargs_update(self.default_scatter_kwargs,
                                                     **{"cmap":self.cmap})
@@ -337,8 +331,7 @@ class PlotStep( pb.Plot3Axes ):
                  rangey=None,rangex=None,
                  ybihist = True,xbins=10,ybins=10,
                  **kwargs):
-        """
-        """
+
         if catch_names and self.obj.names is None:
             print "WARNING, you can not use name_catcher. No names defined"
         else:
@@ -415,8 +408,6 @@ class PlotStep( pb.Plot3Axes ):
     def add_legend(self,cbarwidth=0.02,nticks=4,
                    label="",update=True,
                    axcbar=None,**kwargs):
-        """
-        """
         # -- are you only 0 or 1 ?
         if (self.obj.proba %1 >0).any(): # No there is proba
             # -- Where to show the bar
@@ -453,18 +444,17 @@ class PlotStep( pb.Plot3Axes ):
            
 
     def set_xlim(self,xmin,xmax):
-        """
-        """
+
         self.ax.set_xlim(xmin,xmax)
         if self.axhistx is not None:
             self.axhistx.set_xlim(self.ax.get_xlim())
 
     def set_ylim(self,ymin,ymax):
-        """
-        """
+
         self.ax.set_ylim(ymin,ymax)
         if self.axhisty is not None:
             self.axhisty.set_ylim(self.ax.get_ylim())
 
         
+
 """

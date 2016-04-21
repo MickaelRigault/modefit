@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import numpy as N
 from scipy       import stats
-from .lowlevel.bimodalfitter import BimodalFit
+from ..lowlevel.bimodalfitter import BimodalFit
 
 __all__ = ["step_fitter"]
 
@@ -10,6 +10,7 @@ __all__ = ["step_fitter"]
 def step_fitter(x,data,errors,proba=None,dx=None,xCut=None,**kwargs):
     """ Load a StepFit instance to fit a step in your data """
     return StepFit(x,data,errors,proba=None,dx=None,xCut=None,**kwargs)
+
 # ========================== #
 # ========================== #
 # ==  Step                == #
