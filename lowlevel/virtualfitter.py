@@ -59,9 +59,9 @@ class VirtualFitter( object ):
         self.setup_guesses(**kwargs)
         
         if use_minuit is not None:
-            self.useMinuit = use_minuit
+            self.use_minuit = use_minuit
 
-        if self.useMinuit:
+        if self.use_minuit:
             self._fit_minuit_()
         else:
             self._fit_scipy_()
@@ -71,13 +71,13 @@ class VirtualFitter( object ):
     def _fit_readout_(self):
         """ Gather the output in the readout, you could improve that in you child class"""
         
-        self.fitValues = {}
+        self.fitvalues = {}
         for i,name in enumerate(self.model.freeParameters):
-            self.fitValues[name] = self.fitParameters[i]
-            self.fitValues[name+".err"] = np.sqrt(self.covMatrix[i,i])
+            self.fitvalues[name] = self._fitparams[i]
+            self.fitvalues[name+".err"] = np.sqrt(self.covMatrix[i,i])
             
         # -- Additional data -- #
-        self.fitValues["chi2"]    = self.get_fval()
+        self.fitvalues["chi2"]    = self.get_fval()
 
         
     # --------------------- #
@@ -86,33 +86,33 @@ class VirtualFitter( object ):
     def get_fitvalues(self):
         """
         """
-        if "fitValues" not in dir(self):
+        if not self.fitperformed:
             raise AttributeError("You should fit first !")
-        return self.fitValues.copy()
+        return self.fitvalues.copy()
 
     def get_fval(self):
         """
         """
-        if "fitValues" not in dir(self):
+        if not self.fitperformed:
             raise AttributeError("You should fit first !")
         
-        if self.useMinuit:
+        if self.use_minuit:
             return self.minuit.fval
         return self.scipy_output['fun']
 
     def converged_on_boundaries(self):
         """Check if any parameter have converged on any boundary of the model"""
         
-        if "fitValues" not in dir(self):
+        if not self.fitperformed:
             raise AttributeError("You should fit first !")
 
         for name in self.model.freeParameters:
             lowerbound,higherbound = eval("self.model.%s_boundaries"%name)
             if lowerbound is not None and \
-              "%.4e"%self.fitValues[name] == "%.4e"%lowerbound :
+              "%.4e"%self.fitvalues[name] == "%.4e"%lowerbound :
                 return True
             if higherbound is not None and \
-              "%.4e"%self.fitValues[name] == "%.4e"%higherbound :
+              "%.4e"%self.fitvalues[name] == "%.4e"%higherbound :
                 return True
         return False
 
@@ -130,7 +130,7 @@ class VirtualFitter( object ):
           For each variable `v` of the model (see model.freeParameters)
           the following entries will be defined: v_guess, v_boundaries, v_fixed.
           An internal dictionnary _guesses will be created as well as three
-          arrays: self.pGuess, self.pBounds,self.pFixed.
+          arrays: self.paramguess, self.parambounds,self.paramfixed.
           Those will then be used by the fitter.
         =
 
@@ -143,7 +143,7 @@ class VirtualFitter( object ):
                                     [None,None] for _boundaries
 
         = RETURNS =
-        Void, defines the pGuess, pBounds and pFixed
+        Void, defines the paramguess, parambounds and paramfixed
         """
         def _test_it_(k,info):
             param = k.split(info)[0]
@@ -179,18 +179,18 @@ class VirtualFitter( object ):
             for v in ["_guess","_fixed","_boundaries"]:
                 self.model.__dict__[name+v] = self._guesses[name+v]
                 
-        # -- Create the pGuess, pFixed and pBounds
+        # -- Create the paramguess, paramfixed and parambounds
         self._load_guesses_and_associate_()
         
     def _load_guesses_and_associate_(self):
         """
         """
         # -- For the user to follow
-        self.pGuess  = [self._guesses["%s_guess"%name]
+        self.paramguess  = [self._guesses["%s_guess"%name]
                         for name in self.model.freeParameters]
-        self.pFixed  = [self._guesses["%s_fixed"%name]
+        self.paramfixed  = [self._guesses["%s_fixed"%name]
                         for name in self.model.freeParameters]
-        self.pBounds = [self._guesses["%s_boundaries"%name]
+        self.parambounds = [self._guesses["%s_boundaries"%name]
                         for name in self.model.freeParameters]
 
     # ---------------------- #
@@ -209,12 +209,12 @@ class VirtualFitter( object ):
         elif verbose:
             self.fitOk = True
             
-        self.fitParameters = np.asarray([self.minuit.values[k]
+        self._fitparams = np.asarray([self.minuit.values[k]
                               for k in self.model.freeParameters])
         if self._migrad_output_[0]["is_valid"]:
             self.covMatrix    = self.model.read_hess(np.asarray(self.minuit.matrix()))
         else:
-            fakeMatrix = np.zeros((len(self.fitParameters),len(self.fitParameters)))
+            fakeMatrix = np.zeros((len(self._fitparams),len(self._fitparams)))
             for i,k in enumerate(self.model.freeParameters):
                 fakeMatrix[i,i] = self.minuit.errors[k]**2
             print "*WARNING* Inaccurate covariance Matrix. Only trace defined"
@@ -247,7 +247,7 @@ class VirtualFitter( object ):
         from scipy.optimize import minimize
         self._setup_scipy_()
         self.scipy_output = minimize(self.model._scipy_chi2_,
-                                    self._pGuessScipy,bounds=self._pBoundsScipy)
+                                    self._paramguess_scipy,bounds=self._parambounds_scipy)
         if "hess_inv" in self.scipy_output:
             self.covMatrix     = self.model.read_hess(self.scipy_output['hess_inv'])
         else:
@@ -256,7 +256,7 @@ class VirtualFitter( object ):
                 fakeHess[i,i]=self.scipy_output["jac"][i]
             self.covMatrix     = self.model.read_hess(fakeHess)
                 
-        self.fitParameters = self.model._read_scipy_parameter_(self.scipy_output["x"])
+        self._fitparams = self.model._read_scipy_parameter_(self.scipy_output["x"])
         self.fitOk         = True
         
     def _setup_scipy_(self):
@@ -265,10 +265,16 @@ class VirtualFitter( object ):
           the parametrisation is made
         =
         """
-        self._pGuessScipy, self._pBoundsScipy = \
-          self.model._parameter2scipyparameter_(self.pGuess,self.pBounds)
+        self._paramguess_scipy, self._parambounds_scipy = \
+          self.model._parameter2scipyparameter_(self.paramguess,self.parambounds)
     
 
+    # ====================== #
+    # = Properties         = #
+    # ====================== #
+    @property
+    def fitperformed(self):
+        return "fitvalues" in dir(self)
 
 # ========================================== #
 #                                            #

@@ -108,7 +108,7 @@ class StepFit( BimodalFit ):
         # ----------------------- #
         # -- The Mother's Init -- #
         # ----------------------- #
-        super(StepFit,self).__init__(data, errors,proba,**kwargs)
+        super(StepFit,self).__init__(data, errors, proba, **kwargs)
         
 
     # ========================= #
@@ -116,18 +116,20 @@ class StepFit( BimodalFit ):
     # ========================= #
     def get_proba(self,xcut=None):
         """
-        =
          This function will split the sample in two at the given *xcut* value.
          If no *dx* provided, *proba* will be 0 or 1. Otherwise errors
          on the x-axis will be used to define non-trivial probability.
          CAUTION: if there is errors, this assumes then symetric and gaussian.
-        =
+
+        Parameters:
+        -----------
 
         xcut: [float/None]         The x-value where the sample is splitted in 2.
                                    If None is set, self.xcut will be used if it
                                    already is defined. This will update self.xcut.
 
-        = RETURNS =
+        Returns:
+        --------
         array of float (between 0 and 1 ;size of x)
         """
         if xcut is not None:
@@ -147,9 +149,10 @@ class StepFit( BimodalFit ):
              figure=None,cmap=mpl.cm.ocean,ybihist=True,
              propaxes={},**kwargs):
         """
-        = Plot the *x*, *data* 3-axes plot, including *proba* marker
-          colors.
-        =
+        Plot the *x*, *data* 3-axes plot, including *proba* marker colors.
+
+        Parameters:
+        -----------
 
         savefile: [string/None]     If you wish to save the plot in the given
                                     filename (*without extention*). This will create
@@ -175,11 +178,12 @@ class StepFit( BimodalFit ):
                                     (e.g., swap_bihistograms, catch_names or any
                                     matplotlib.plot entry ...)
 
-        = RETURNS =
+        Returns:
+        --------
         Void
         """
-
         from ..utils.tools import kwargs_update
+
         # =================
         # Setting the Axes
         # =================
@@ -230,27 +234,24 @@ class StepFit( BimodalFit ):
         # The Fitted Values
         # =================
         #-- if you already made the fit
-        if "fitModelA" in dir(self):
+        if self.fitperformed:
             # -- To be improve, this does not move with the axis if user does so.
             from ..utils.mpladdon import hline,hspan
             for ax_,cut in [[ax,self.xcut],[axhisty,0]]:
                 if ax_ is None: continue
                 
-                ax_.hline(self.fitModelA['mean'],xmax=cut,
+                ax_.hline(self.fitout["a"]['mean'],xmax=cut,
                        color=mpl.cm.binary(0.9),alpha=0.8)
             
-                ax_.hspan(self.fitModelA['mean']-self.fitModelA['mean.err'],
-                        self.fitModelA['mean']+self.fitModelA['mean.err'],
+                ax_.hspan(self.fitout["a"]['mean']-self.fitout["a"]['mean.err'],
+                        self.fitout["a"]['mean']+self.fitout["a"]['mean.err'],
                         xmax=cut,
                         color=mpl.cm.binary(0.9),alpha=0.2)
             
-                ax_.hline(self.fitModelB['mean'],xmin=cut,
-                     color=mpl.cm.Blues(0.9),alpha=0.8)
+                ax_.hline(self.fitout["b"]['mean'],xmin=cut,
+                     color=cmap(0.1,0.8))
                 
-                ax_.hspan(self.fitModelB['mean']-self.fitModelB['mean.err'],
-                        self.fitModelB['mean']+self.fitModelB['mean.err'],
+                ax_.hspan(self.fitout["b"]['mean']-self.fitout["b"]['mean.err'],
+                        self.fitout["b"]['mean']+self.fitout["b"]['mean.err'],
                         xmin=cut,
-                        color=mpl.cm.Blues(0.9),alpha=0.2)
-
-
-        
+                        color=cmap(0.1,0.2))

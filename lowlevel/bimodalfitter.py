@@ -102,7 +102,7 @@ class BimodalFit( VirtualFitter ):
         self.npoints = len(self.data)
 
         # -- for the fit
-        self.useMinuit = use_minuit
+        self.use_minuit = use_minuit
         self.load_model(modelName=modelName)
 
 
@@ -117,28 +117,27 @@ class BimodalFit( VirtualFitter ):
         # ---------------------- #
         # -- Convinient result - #
         # ---------------------- #
-        self.modelStep    = self.fitModelA['mean'] - self.fitModelB['mean']
+        self.modelStep    = self.fitout["a"]['mean'] - self.fitout["b"]['mean']
         # -- Covariance needs to be added
-        self.modelStepErr = np.sqrt(self.fitModelA['mean.err']**2 +
-                                   self.fitModelB['mean.err']**2)
+        self.modelStepErr = np.sqrt(self.fitout["a"]['mean.err']**2 +
+                                   self.fitout["b"]['mean.err']**2)
 
     def _fit_readout_(self):
         """
         """
         super(BimodalFit,self)._fit_readout_()
-        self.fitModelA = {
-            "mean":self.fitValues["mean_a"],
-            "mean.err":self.fitValues["mean_a.err"],
-            "sigma":self.fitValues["sigma_a"],
-            "sigma.err":self.fitValues["sigma_a.err"]
-            }
-        
-        self.fitModelB = {
-            "mean":self.fitValues["mean_b"],
-            "mean.err":self.fitValues["mean_b.err"],
-            "sigma":self.fitValues["sigma_b"],
-            "sigma.err":self.fitValues["sigma_b.err"]
-            }
+        self.fitout = {"a":{
+            "mean":self.fitvalues["mean_a"],
+            "mean.err":self.fitvalues["mean_a.err"],
+            "sigma":self.fitvalues["sigma_a"],
+            "sigma.err":self.fitvalues["sigma_a.err"]
+            },
+            "b":{
+            "mean":self.fitvalues["mean_b"],
+            "mean.err":self.fitvalues["mean_b.err"],
+            "sigma":self.fitvalues["sigma_b"],
+            "sigma.err":self.fitvalues["sigma_b.err"]
+            }}
         
     # ========================= #
     # = Model                 = #  
@@ -226,20 +225,26 @@ class BimodalFit( VirtualFitter ):
         self.plot.show_key("proba",axes=axes,**kwargs)
         
         # -- Mean best fit results
-        if "fitModelA" in dir(self):
+        if "fitout" in dir(self):
             self.plot.fline = pt.FancyLine()
             
-            self.plot.fline.hline(self.plot.ax,self.fitModelA['mean'],
+            self.plot.fline.hline(self.plot.ax,self.fitout["a"]['mean'],
                                 rangex=[0,1],lws=[0,1],alphas=[0,1],colors=[0,1],
                                 cmap=pt.P.cm.binary)
             
-            self.plot.fline.hline(self.plot.ax,self.fitModelB['mean'],
+            self.plot.fline.hline(self.plot.ax,self.fitout["b"]['mean'],
                                 rangex=[0,1],lws=[1,0],alphas=[1,0],colors=[1,0],
                                 cmap=pt.P.cm.Blues)
             
         # -- the output
         self.plot.savefilereader(savefile)
-    
+
+
+
+    # ====================== #
+    # Properties             #
+    # ====================== #
+
         
 # ========================== #
 # ========================== #
