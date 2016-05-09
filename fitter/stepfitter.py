@@ -32,7 +32,7 @@ class StepFit( BimodalFit ):
     """
     def __init__(self,x,data,errors,
                  proba=None,dx=None,
-                 xcut=None,**kwargs):
+                 xcut=None,name=None,**kwargs):
         """
         = This class is a child of *BimodalFit* that have the ability to
           use an extra x-axis value to potentially define *proba* if needed
@@ -51,7 +51,7 @@ class StepFit( BimodalFit ):
                                    
         errors: [array]            Errors associated to the *data*.
                                    This must have the same size as *data*
-                                   
+
         # ------- #
                               
         proba: [array/None]        Probability of the data to belong to one
@@ -63,6 +63,9 @@ class StepFit( BimodalFit ):
                                    as *data*. The probabilies must be float between
                                    0 and 1.
                                    
+        name: [array/None]         Name of the given points. Optional.
+
+        
         dx: [array/None]           If the x-axis have errors.
                                    In addition to plot functions, these errors
                                    will be used if proba have to be defined using
@@ -144,8 +147,35 @@ class StepFit( BimodalFit ):
     # ========================= #
     # = Step Shows            = #  
     # ========================= #
+    def bokeh(self,savefile=None,name=None):
+        """
+        """
+        from bokeh.models import ColumnDataSource, OpenURL, TapTool
+        from bokeh.plotting import figure, output_file, show
     
-    def show(self,savefile=None,axes=None,rangey=[-0.6,0.6],
+        output_file("openurl.html")
+
+        p = figure(plot_width=400, plot_height=400,
+                   toolbar_location="above",
+                   tools="tap,resize,pan", title="Click the Dots")
+        
+        source = ColumnDataSource(data=dict(
+            x=self.x,
+            y=self.data,
+            name=self.name,
+            #color=["navy", "orange", "olive", "firebrick", "gold"]
+            ))
+
+        p.circle('x', 'y',  size=20, source=source)
+
+        url = "http://snf.in2p3.fr/lc/@snname"
+        taptool = p.select(type=TapTool)
+        taptool.callback = OpenURL(url=url)
+
+        show(p)
+
+        
+    def show(self,savefile=None,axes=None,#rangey=[-0.6,0.6],
              figure=None,cmap=mpl.cm.ocean,ybihist=True,
              propaxes={},**kwargs):
         """
