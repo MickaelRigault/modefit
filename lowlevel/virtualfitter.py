@@ -332,6 +332,25 @@ class ScipyMinuitFitter ( object ):
             
         return hess
 
+
+    # -- Bayesian Touch
+    def lnprior(self,parameters, verbose=True):
+        """ perfectely flat prior, should be change by inheriting classed"""
+        if verbose: print "Perfectly flat prior used. Always 0 (set verbose=False to avoid this message)"
+        return 0
+        
+        
+    def lnprob(self,parameters):
+        """ This is the Bayesian posterior function (in log).
+        it returns  lnprior - 0.5*Chi2
+        (Assuming Chi2 = -2logLikelihood)
+        """
+        priors = self.lnprior(parameters)
+        if not np.isfinite(priors):
+            return -np.inf
+        # not sure it works with the _minuit_chi2_/_scipy_chi2_  tricks
+        return priors - 0.5*self.get_chi2(parameters)
+
     # ==================== #
     # = Minuit           = #
     # ==================== #
