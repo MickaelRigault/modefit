@@ -7,7 +7,7 @@ import numpy        as np
 from scipy          import stats
 
 from ..utils.tools  import kwargs_update
-from .virtualfitter import ScipyMinuitFitter,VirtualFitter
+from .virtualfitter import ScipyMinuitModel,VirtualFitter
 
 """
 import plotBasics as pb
@@ -27,7 +27,7 @@ from mplTools     import get_mrearth,FancyLine
 class BimodalFit( VirtualFitter ):
     """
     =  Child of VirtualFitter that understand the scipy/minuit tricks
-       of the Models that inherit ScipyMinuitFitter.
+       of the Models that inherit ScipyMinuitModel.
     = 
     """
     def __init__(self,data, errors,
@@ -251,10 +251,10 @@ class BimodalFit( VirtualFitter ):
 # ==  The Model           == #
 # ========================== #
 # ========================== #
-class ModelBinormal( ScipyMinuitFitter ):
+class ModelBinormal( ScipyMinuitModel ):
     """
     """
-    freeParameters = ["mean_a","sigma_a",
+    freeparameters = ["mean_a","sigma_a",
                       "mean_b","sigma_b"]
         
     sigma_a_guess = 0
@@ -278,6 +278,15 @@ class ModelBinormal( ScipyMinuitFitter ):
         """
         return p * self.get_modela_pdf(x,dx) + (1-p) * self.get_modelb_pdf(x,dx)
 
+
+    # ----------------------- #
+    # - Bayesian methods    - #
+    # ----------------------- #
+    def lnprior(self,parameter):
+        """ so far a flat prior """
+        return 0
+        
+    
     # ----------------------- #
     # - The ActualModel     - #
     # ----------------------- #

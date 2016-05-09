@@ -9,7 +9,7 @@ from scipy import stats
 from astropy       import constants
 
 # local dependency
-from ..lowlevel.virtualfitter import ScipyMinuitFitter,VirtualFitter
+from ..lowlevel.virtualfitter import ScipyMinuitModel,VirtualFitter
 
 # astrobject dependencies
 from astrobject.astrobject.spectroscopy import Spectrum
@@ -364,7 +364,7 @@ class LinesFitter( Spectrum, VirtualFitter ):
             self.v    *= self.fitvalues["chi2dof"]
             self.vfit *= self.fitvalues["chi2dof"]
             k_newguess = {}
-            for name in self.model.freeParameters:
+            for name in self.model.freeparameters:
                 k_newguess["%s_guess"%name] = np.abs(self.fitvalues[name] + np.random.rand(1)*10)
             self.fit(**k_newguess)
         
@@ -376,7 +376,7 @@ class LinesFitter( Spectrum, VirtualFitter ):
         # Add default velocity boundaries
         #
         super(LinesFitter,self).setup_guesses(**kwargs)
-        if "velocity" in self.model.freeParameters and self.model.velocity_boundaries == [None,None]:
+        if "velocity" in self.model.freeparameters and self.model.velocity_boundaries == [None,None]:
             self.model.velocity_boundaries = [self.model.velocity_guess - self.model._velocity_boundWidth,
                                               self.model.velocity_guess + self.model._velocity_boundWidth]
             self._guesses["velocity_boundaries"] = self.model.velocity_boundaries
@@ -529,7 +529,7 @@ class LinesFitter( Spectrum, VirtualFitter ):
         variance_onzero = kwargs.pop("variance_onzero",True)
 
         # -- Only Halpha Known -- #
-        if "OII1" not in self.model.freeParameters:
+        if "OII1" not in self.model.freeparameters:
             self.show_HaNII(savefile=savefile,variance_onzero=variance_onzero,
                             **kwargs)
             return
@@ -624,117 +624,6 @@ class LinesFitter( Spectrum, VirtualFitter ):
 
 
 
-
-
-    # ===================== #
-    # = MCMC Stuffs       = #
-    # ===================== #
-    def run_mcmc(self,nrun=2000, walkers_per_dof=3):
-        """
-        """
-        import emcee
-
-        # -- set up the mcmc
-        self.mcmc["ndim"], self.mcmc["nwalkers"] = \
-          self.model.nParam, self.model.nParam*walkers_per_dof
-        self.mcmc["nrun"] = nrun
-        
-        # -- init the walkers
-        fitted = np.asarray([self.fitvalues[name] for name in self.model.freeParameters])
-        err    = np.asarray([self.fitvalues[name+".err"] for name in self.model.freeParameters])
-        self.mcmc["pos_init"] = self._fitparams
-        self.mcmc["pos"] = [self._fitparams + np.random.randn(self.mcmc["ndim"])*err for i in range(self.mcmc["nwalkers"])]
-        # -- run the mcmc        
-        self.mcmc["sampler"] = emcee.EnsembleSampler(self.mcmc["nwalkers"], self.mcmc["ndim"], self.model.lnprob)
-        _ = self.mcmc["sampler"].run_mcmc(self.mcmc["pos"], self.mcmc["nrun"])
-    
-    def show_mcmc_corner(self, savefile=None, show=True,
-                         truths=None,**kwargs):
-        """
-        **kwargs goes to corner.corner
-        """
-        import corner
-        from astrobject.utils.mpladdon import figout
-        fig = corner.corner(self.mcmc_samples, labels=self.model.freeParameters, 
-                        truths=self.mcmc["pos_init"] if truths is None else truths,
-                        show_titles=True,label_kwargs={"fontsize":"xx-large"})
-
-        fig.figout(savefile=savefile, show=show)
-        
-    def show_mcmcwalkers(self, savefile=None, show=True,
-                        cwalker=None, cline=None, truths=None, **kwargs):
-        """ Show the walker values for the mcmc run.
-
-        Parameters
-        ----------
-
-        savefile: [string]
-            where to save the figure. if None, the figure won't be saved
-
-        show: [bool]
-            If no figure saved, the function will show it except if this is set
-            to False
-
-        cwalker, cline: [matplotlib color]
-            Colors or the walkers and input values.
-        """
-        # -- This show the 
-        import matplotlib.pyplot as mpl
-        from astrobject.utils.mpladdon import figout
-        if not self.has_mcmc_ran():
-            raise AttributeError("you must run mcmc first")
-        
-        fig = mpl.figure(figsize=[7,3*self.mcmc["ndim"]])
-        # -- inputs
-        if cline is None:
-            cline = mpl.cm.Blues(0.4,0.8)
-        if cwalker is None:
-            cwalker = mpl.cm.binary(0.7,0.2)
-        
-        # -- ploting            
-        for i, name, fitted in zip(range(self.mcmc["ndim"]), self.model.freeParameters, self.mcmc["pos_init"] if truths is None else truths):
-            ax = fig.add_subplot(self.mcmc["ndim"],1,i+1, ylabel=name)
-            _ = ax.plot(np.arange(self.mcmc["nrun"]), self.mcmc["sampler"].chain.T[i],
-                        color=cwalker,**kwargs)
-            
-            ax.axhline(fitted, color=cline, lw=2)
-
-        fig.figout(savefile=savefile, show=show)
-
-    # ================ #
-    # = Properties   = #
-    # ================ #
-    @property
-    def mcmc(self):
-        """ dictionary containing the mcmc parameters """
-        if "_mcmc" not in dir(self):
-            self._mcmc = {}
-        return self._mcmc
-
-    @property
-    def mcmc_samples(self):
-        """ the flatten samplers after burned in removal, see set_mcmc_samples """
-        if not self.has_mcmc_ran():
-            raise AttributeError("run mcmc first.")
-        if "burnin" not in self.mcmc.keys():
-            raise AttributeError("You did not specified the burnin value. see 'set_mcmc_burnin")
-        return self.mcmc["sampler"].chain[:, self.mcmc["burnin"]:, :].reshape((-1, self.mcmc["ndim"]))
-    
-    def set_mcmc_burnin(self, burnin):
-        """ """
-        if burnin<0 or burnin>self.mcmc["nrun"]:
-            raise ValueError("the mcmc burnin must be greater than 0 and lower than the amount of run.")
-        
-        self.mcmc["burnin"] = burnin
-        
-    def _set_mcmc_(self,mcmcdict):
-        """ Advanced methods to avoid rerunning an existing mcmc """
-        self._mcmc = mcmcdict
-        
-    def has_mcmc_ran(self):
-        """ return True if you ran 'run_mcmc' """
-        return "sampler" in self.mcmc.keys()
-
 ########################################################
 #                                                      #
 #      LINE MODEL CLASSES                              #
@@ -769,7 +658,7 @@ class _OpticalLines_( Spectrum ):
     @_autogen_docstring_inheritance(Spectrum.__init__,"Spectrum.__init__")
     def __init__(self,*args,**kwargs):
         
-        for name in self.freeParameters:
+        for name in self.freeparameters:
             if name in self.eLinesNames:
                 self.__dict__['%s_boundaries'%name] = [0,None]
             
@@ -914,10 +803,10 @@ class _OpticalLines_( Spectrum ):
 # =================================== #
 # =  Models                         = #
 # =================================== #
-class OpticalLines_Basic( _OpticalLines_,ScipyMinuitFitter ):
+class OpticalLines_Basic( _OpticalLines_,ScipyMinuitModel ):
     """
     """
-    freeParameters = ["OII1","OII2","HN","HC","HE","HD","HG","HB",
+    freeparameters = ["OII1","OII2","HN","HC","HE","HD","HG","HB",
                        "OIII","HA","NII","SII1","SII2",
                        "velocity","dispersion"]
     
@@ -927,7 +816,7 @@ class OpticalLines_Basic( _OpticalLines_,ScipyMinuitFitter ):
     _indexOII1    = np.argwhere(_OpticalLines_.eLinesNames == "OII1")[0][0]
     _indexOII2    = np.argwhere(_OpticalLines_.eLinesNames == "OII2")[0][0]
 
-    nParam = len(freeParameters)
+    nParam = len(freeparameters)
     nAmpl  = nParam -2
     # ==================== #
     # =  Model           = #
@@ -975,7 +864,7 @@ class OpticalLines_Basic( _OpticalLines_,ScipyMinuitFitter ):
                        OIII,HA,NII,SII1,SII2,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly
-        (Give here all the parameter using the freeParameters order)
+        (Give here all the parameter using the freeparameters order)
         """
         
         parameter = np.asarray([OII1, OII2,
@@ -988,12 +877,12 @@ class OpticalLines_Basic( _OpticalLines_,ScipyMinuitFitter ):
 # ------------------------------- #
 # --   Halpha NII  Model       -- #
 # ------------------------------- #
-class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitFitter  ):
+class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitModel  ):
     """
     """
-    freeParameters = ["HA","NII", "velocity","dispersion"]
+    freeparameters = ["HA","NII", "velocity","dispersion"]
     
-    nParam = len(freeParameters)
+    nParam = len(freeparameters)
     nAmpl  = nParam - 2
     _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
     _indexNIIR    = np.argwhere(_OpticalLines_.eLinesNames == "NII_2")[0][0]
@@ -1044,7 +933,7 @@ class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitFitter  ):
     def _minuit_chi2_(self,HA,NII,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly
-        (Give here all the parameter using the freeParameters order)
+        (Give here all the parameter using the freeparameters order)
         """
         parameter = np.asarray([HA,NII,
                     velocity,dispersion])
@@ -1057,11 +946,11 @@ class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitFitter  ):
 class OpticalLines_HaNIICont( OpticalLines_HaNII ):
     """
     """
-    freeParameters = ["HA","NII",
+    freeparameters = ["HA","NII",
                       "cont0","contSlope",
                       "velocity","dispersion"]
     
-    nParam = len(freeParameters)
+    nParam = len(freeparameters)
     
     contSlope_guess = 0
     contSlope_fixed = True
@@ -1088,7 +977,7 @@ class OpticalLines_HaNIICont( OpticalLines_HaNII ):
     def _minuit_chi2_(self,HA,NII,cont0,contSlope,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly =
-        (Give here all the parameter using the freeParameters order)
+        (Give here all the parameter using the freeparameters order)
         """
         parameter = np.asarray([HA,NII,cont0,contSlope,
                                velocity,dispersion])
@@ -1098,14 +987,14 @@ class OpticalLines_HaNIICont( OpticalLines_HaNII ):
 # ------------------------------- #
 # --  Halpha NII  Model Balmer -- #
 # ------------------------------- #
-class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitFitter ):
+class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitModel ):
     """
     """
-    freeParameters = ["HA","NII",
+    freeparameters = ["HA","NII",
                       "ebmv","Rv",
                       "velocity","dispersion"]
     
-    nParam = len(freeParameters)
+    nParam = len(freeparameters)
     nAmpl  = nParam - 4
     
     _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
@@ -1219,7 +1108,7 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitFitter ):
     def _minuit_chi2_(self,HA,NII,ebmv,Rv,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly =
-        (Give here all the parameter using the freeParameters order)
+        (Give here all the parameter using the freeparameters order)
         """
         parameter = np.asarray([HA,NII,ebmv,Rv,
                     velocity,dispersion])
@@ -1229,13 +1118,13 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitFitter ):
 # ------------------------------- #
 # --   Halpha NII  Model       -- #
 # ------------------------------- #
-class OpticalLines_Mains( _OpticalLines_,ScipyMinuitFitter  ):
+class OpticalLines_Mains( _OpticalLines_,ScipyMinuitModel  ):
     """
     """
-    freeParameters = ["HA","NII","OII1","OII2","SII1","SII2",
+    freeparameters = ["HA","NII","OII1","OII2","SII1","SII2",
                        "velocity","dispersion"]
     
-    nParam = len(freeParameters)
+    nParam = len(freeparameters)
     nAmpl  = nParam - 2
     _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
     _indexNIIR    = np.argwhere(_OpticalLines_.eLinesNames == "NII_2")[0][0]
@@ -1296,7 +1185,7 @@ class OpticalLines_Mains( _OpticalLines_,ScipyMinuitFitter  ):
     def _minuit_chi2_(self,HA,NII,OII1,OII2,SII1,SII2,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly =
-        (Give here all the parameter using the freeParameters order)
+        (Give here all the parameter using the freeparameters order)
         """
         parameter = np.asarray([HA,NII,OII1,OII2,SII1,SII2,
                     velocity,dispersion])

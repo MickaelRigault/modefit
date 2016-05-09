@@ -9,6 +9,9 @@ import warnings
 
 from .tools import make_method, kwargs_update 
 
+
+print "DECREPATED  use the astrobject one"
+
 __all__ = ["add_threeaxes"]
 
 @make_method(mpl.Figure)

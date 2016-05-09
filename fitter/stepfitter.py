@@ -22,6 +22,7 @@ def step_fitter(x,data,errors,proba=None,dx=None,xcut=None,
                    proba=proba,dx=dx,xcut=xcut,
                    **kwargs)
 
+
 # ========================== #
 # ========================== #
 # ==  Step                == #
@@ -178,35 +179,32 @@ class StepFit( BimodalFit ):
     def show(self,savefile=None,axes=None,#rangey=[-0.6,0.6],
              figure=None,cmap=mpl.cm.ocean,ybihist=True,
              propaxes={},**kwargs):
-        """
-        Plot the *x*, *data* 3-axes plot, including *proba* marker colors.
+        """ Plot x, data in a 3-axes plot
 
         Parameters:
         -----------
+        savefile: [string/None]
+            If you wish to save the plot in the given filename (*without extention*).
+            This will create a `savefile`.pdf and `savefile`.png
+            The plot won't be show if it is saved.
 
-        savefile: [string/None]     If you wish to save the plot in the given
-                                    filename (*without extention*). This will create
-                                    a `savefile`.pdf and `savefile`.png
-                                    The plot won't be show if it is saved.
-
-        axes: [3-array axes/None]   Give mpl axes in which the plot will be drawn
-                                    3 axes must be given (axsc, axhistx, axhisty).
-                                    The latest 2 (both or only one) could be set to
-                                    None if you do not wish to have the corresponding
-                                    histogram plotted.
+        axes: [3-array axes/None]
+            Give mpl axes in which the plot will be drawn 3 axes must be given
+            (axsc, axhistx, axhisty). The latest 2 (both or only one) could be set 
+            to None if you do not wish to have the corresponding histogram plotted.
                                     
-        figure: [mpl.Figure]        if you did not provided axes, you can give a figure
-                                    into which the axes will be drawn, otherwise this
-                                    this create a new one.
-        # ------ #
-
-        ybihist: [bool]             Oppose the two y-histogram
+        figure: [mpl.Figure]
+            If you did not provided axes, you can give a figure into which the axes
+            will be drawn, otherwise this this create a new one.
+            
+        ybihist: [bool]
+           Oppose the two y-histogram
         
-        propaxes: [dict]            properties entering the 'add_threeaxes' as kwargs.
+        propaxes: [dict]
+           properties entering the 'add_threeaxes' as kwargs.
         
-        **kwargs                    goes to the StepPlot Class function show_key
-                                    (e.g., swap_bihistograms, catch_names or any
-                                    matplotlib.plot entry ...)
+        **kwargs   goes to the mother Class function show_key
+        (e.g., swap_bihistograms, catch_names or any matplotlib.plot entry)
 
         Returns:
         --------
@@ -223,7 +221,8 @@ class StepFit( BimodalFit ):
             ax,axhistx,axhisty = axes
             fig = ax.figure
         else:
-            from ..utils.mpladdon import add_threeaxes
+            from astrobject.utils.mpladdon import add_threeaxes
+            
             fig = figure if figure is not None else mpl.figure(figsize=[13,10])
             ax,axhistx,axhisty = fig.add_threeaxes(**propaxes)
 
@@ -266,7 +265,7 @@ class StepFit( BimodalFit ):
         #-- if you already made the fit
         if self.fitperformed:
             # -- To be improve, this does not move with the axis if user does so.
-            from ..utils.mpladdon import hline,hspan
+            from astrobject.utils.mpladdon import hline,hspan
             for ax_,cut in [[ax,self.xcut],[axhisty,0]]:
                 if ax_ is None: continue
                 

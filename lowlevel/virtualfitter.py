@@ -72,7 +72,7 @@ class VirtualFitter( object ):
         """ Gather the output in the readout, you could improve that in you child class"""
         
         self.fitvalues = {}
-        for i,name in enumerate(self.model.freeParameters):
+        for i,name in enumerate(self.model.freeparameters):
             self.fitvalues[name] = self._fitparams[i]
             self.fitvalues[name+".err"] = np.sqrt(self.covMatrix[i,i])
             
@@ -106,7 +106,7 @@ class VirtualFitter( object ):
         if not self.fitperformed:
             raise AttributeError("You should fit first !")
 
-        for name in self.model.freeParameters:
+        for name in self.model.freeparameters:
             lowerbound,higherbound = eval("self.model.%s_boundaries"%name)
             if lowerbound is not None and \
               "%.4e"%self.fitvalues[name] == "%.4e"%lowerbound :
@@ -127,7 +127,7 @@ class VirtualFitter( object ):
         """
         = Defines the values' guesses, boundaries and fixes that will be
           passed to the given model.
-          For each variable `v` of the model (see model.freeParameters)
+          For each variable `v` of the model (see model.freeparameters)
           the following entries will be defined: v_guess, v_boundaries, v_fixed.
           An internal dictionnary _guesses will be created as well as three
           arrays: self.paramguess, self.parambounds,self.paramfixed.
@@ -147,7 +147,7 @@ class VirtualFitter( object ):
         """
         def _test_it_(k,info):
             param = k.split(info)[0]
-            if param not in self.model.freeParameters:
+            if param not in self.model.freeparameters:
                 raise ValueError("Unknown parameter %s"%param)
 
             
@@ -168,7 +168,7 @@ class VirtualFitter( object ):
             self._guesses[k] = v
 
         # -- Finally if no values have been set, let's do it
-        for name in self.model.freeParameters:
+        for name in self.model.freeparameters:
             if name+"_guess" not in self._guesses:
                 self._guesses[name+"_guess"] = 0
             if name+"_fixed" not in self._guesses:
@@ -187,15 +187,109 @@ class VirtualFitter( object ):
         """
         # -- For the user to follow
         self.paramguess  = [self._guesses["%s_guess"%name]
-                        for name in self.model.freeParameters]
+                        for name in self.model.freeparameters]
         self.paramfixed  = [self._guesses["%s_fixed"%name]
-                        for name in self.model.freeParameters]
+                        for name in self.model.freeparameters]
         self.parambounds = [self._guesses["%s_boundaries"%name]
-                        for name in self.model.freeParameters]
+                        for name in self.model.freeparameters]
 
-    # ---------------------- #
-    # - Minuit             - #
-    # ---------------------- #
+
+    # ==================== #
+    # = Bayes & MCMC     = #
+    # ==================== #
+    # to be finished
+    def run_mcmc(self,nrun=2000, walkers_per_dof=3):
+        """
+        """
+        try:
+            import emcee
+        except ImportError:
+            raise ImportError("Install emcee first => sudo pip install emcee")
+        
+        # -- set up the mcmc
+        self.mcmc["ndim"], self.mcmc["nwalkers"] = \
+          self.model.nparam, self.model.nparam*walkers_per_dof
+        self.mcmc["nrun"] = nrun
+        
+        # -- init the walkers
+        fitted = np.asarray([self.fitvalues[name] for name in self.model.freeparameters])
+        err    = np.asarray([self.fitvalues[name+".err"] for name in self.model.freeparameters])
+        self.mcmc["pos_init"] = self._fitparams
+        self.mcmc["pos"] = [self._fitparams + np.random.randn(self.mcmc["ndim"])*err for i in range(self.mcmc["nwalkers"])]
+        # -- run the mcmc        
+        self.mcmc["sampler"] = emcee.EnsembleSampler(self.mcmc["nwalkers"], self.mcmc["ndim"], self.model.lnprob)
+        _ = self.mcmc["sampler"].run_mcmc(self.mcmc["pos"], self.mcmc["nrun"])
+
+    def set_mcmc_burnin(self, burnin):
+        """ Set the burnin value above which the walkers are consistants.
+        This is required to access the `samples`
+        """
+        if burnin<0 or burnin>self.mcmc["nrun"]:
+            raise ValueError("the mcmc burnin must be greater than 0 and lower than the amount of run.")
+        
+        self.mcmc["burnin"] = burnin
+        
+    def show_mcmc_corner(self, savefile=None, show=True,
+                         truths=None,**kwargs):
+        """
+        **kwargs goes to corner.corner
+        """
+        try:
+            import corner
+        except ImportError:
+            raise ImportError("install corner to be able to do this plot => sudo pip install corner.")
+        from astrobject.utils.mpladdon import figout
+        
+        fig = corner.corner(self.mcmc_samples, labels=self.model.freeparameters, 
+                        truths=self.mcmc["pos_init"] if truths is None else truths,
+                        show_titles=True,label_kwargs={"fontsize":"xx-large"})
+
+        fig.figout(savefile=savefile, show=show)
+        
+    def show_mcmcwalkers(self, savefile=None, show=True,
+                        cwalker=None, cline=None, truths=None, **kwargs):
+        """ Show the walker values for the mcmc run.
+
+        Parameters
+        ----------
+
+        savefile: [string]
+            where to save the figure. if None, the figure won't be saved
+
+        show: [bool]
+            If no figure saved, the function will show it except if this is set
+            to False
+
+        cwalker, cline: [matplotlib color]
+            Colors or the walkers and input values.
+        """
+        # -- This show the 
+        import matplotlib.pyplot as mpl
+        from astrobject.utils.mpladdon import figout
+        if not self.has_mcmc_ran():
+            raise AttributeError("you must run mcmc first")
+        
+        fig = mpl.figure(figsize=[7,3*self.mcmc["ndim"]])
+        # -- inputs
+        if cline is None:
+            cline = mpl.cm.Blues(0.4,0.8)
+        if cwalker is None:
+            cwalker = mpl.cm.binary(0.7,0.2)
+        
+        # -- ploting            
+        for i, name, fitted in zip(range(self.mcmc["ndim"]), self.model.freeparameters, self.mcmc["pos_init"] if truths is None else truths):
+            ax = fig.add_subplot(self.mcmc["ndim"],1,i+1, ylabel=name)
+            _ = ax.plot(np.arange(self.mcmc["nrun"]), self.mcmc["sampler"].chain.T[i],
+                        color=cwalker,**kwargs)
+            
+            ax.axhline(fitted, color=cline, lw=2)
+
+        fig.figout(savefile=savefile, show=show)    
+    
+
+    # ==================== #
+    # = Minuit           = #
+    # ==================== #
     def _fit_minuit_(self,verbose=True):
         """
         """
@@ -210,12 +304,12 @@ class VirtualFitter( object ):
             self.fitOk = True
             
         self._fitparams = np.asarray([self.minuit.values[k]
-                              for k in self.model.freeParameters])
+                              for k in self.model.freeparameters])
         if self._migrad_output_[0]["is_valid"]:
             self.covMatrix    = self.model.read_hess(np.asarray(self.minuit.matrix()))
         else:
             fakeMatrix = np.zeros((len(self._fitparams),len(self._fitparams)))
-            for i,k in enumerate(self.model.freeParameters):
+            for i,k in enumerate(self.model.freeparameters):
                 fakeMatrix[i,i] = self.minuit.errors[k]**2
             print "*WARNING* Inaccurate covariance Matrix. Only trace defined"
             self.covMatrix    = self.model.read_hess(fakeMatrix)
@@ -229,7 +323,7 @@ class VirtualFitter( object ):
         
         # == Minuit Keys == #
         minuit_kwargs = {}
-        for param in self.model.freeParameters:
+        for param in self.model.freeparameters:
             minuit_kwargs[param]           = self._guesses["%s_guess"%param]
             minuit_kwargs["limit_"+param]  = self._guesses["%s_boundaries"%param]
             minuit_kwargs["fix_"+param]    = self._guesses["%s_fixed"%param]
@@ -268,7 +362,7 @@ class VirtualFitter( object ):
         self._paramguess_scipy, self._parambounds_scipy = \
           self.model._parameter2scipyparameter_(self.paramguess,self.parambounds)
     
-
+    
     # ====================== #
     # = Properties         = #
     # ====================== #
@@ -276,13 +370,37 @@ class VirtualFitter( object ):
     def fitperformed(self):
         return "fitvalues" in dir(self)
 
+    @property
+    def mcmc(self):
+        """ dictionary containing the mcmc parameters """
+        if "_mcmc" not in dir(self):
+            self._mcmc = {}
+        return self._mcmc
+
+    @property
+    def mcmc_samples(self):
+        """ the flatten samplers after burned in removal, see set_mcmc_samples """
+        if not self.has_mcmc_ran():
+            raise AttributeError("run mcmc first.")
+        if "burnin" not in self.mcmc.keys():
+            raise AttributeError("You did not specified the burnin value. see 'set_mcmc_burnin")
+        return self.mcmc["sampler"].chain[:, self.mcmc["burnin"]:, :].reshape((-1, self.mcmc["ndim"]))
+        
+    def _set_mcmc_(self,mcmcdict):
+        """ Advanced methods to avoid rerunning an existing mcmc """
+        self._mcmc = mcmcdict
+        
+    def has_mcmc_ran(self):
+        """ return True if you ran 'run_mcmc' """
+        return "sampler" in self.mcmc.keys()
+    
 # ========================================== #
 #                                            #
 # = Play with Scipy and Minuit Similarly   = #
 #                                            #
 # ========================================== #
 
-class ScipyMinuitFitter ( object ):
+class ScipyMinuitModel ( object ):
     """
     """
     def __init__(self):
@@ -296,22 +414,22 @@ class ScipyMinuitFitter ( object ):
     def _checkup_(self):
         """ Check if your class has the good parameters """
         
-        if "freeParameters" not in dir(self):
-            raise AttributeError("The object must have `freeParameters` defined.")
+        if "freeparameters" not in dir(self):
+            raise AttributeError("The object must have `freeparameters` defined.")
         
-    # ================== #
-    # = Fitter Stuff   = #
-    # ================== #
+    # =================== #
+    # = Fitter Methods  = #
+    # =================== #
     def setup(self,parameter):
         """ parses the parameter to feed the model class """
-        for name,p in zip(self.freeParameters,parameter):
+        for name,p in zip(self.freeparameters,parameter):
             self.__dict__[name] = p 
 
     def get_given_parameterInfo(self):
         """
         """
         infodico = {}
-        for name in self.freeParameters:
+        for name in self.freeparameters:
             for info in ["_guess","_fixed","_boundaries"]:
                 if name+info in dir(self):
                     infodico[name+info] = eval("self.%s"%(name+info))
@@ -320,10 +438,10 @@ class ScipyMinuitFitter ( object ):
     def read_hess(self,hess):
         """
         """
-        if len(hess)==len(self.freeParameters):
+        if len(hess)==len(self.freeparameters):
             return hess
         
-        indexFixed = [i for i,name in enumerate(self.freeParameters)
+        indexFixed = [i for i,name in enumerate(self.freeparameters)
                       if "%s_fixed"%name in dir(self) and eval("self.%s_fixed"%name)]
         for i in indexFixed:
             newhess = np.insert(hess,i,0,axis=0)
@@ -332,8 +450,11 @@ class ScipyMinuitFitter ( object ):
             
         return hess
 
-
-    # -- Bayesian Touch
+    # ==================== #
+    # = Bayesian         = #
+    # ==================== #
+    # assumes you have a `get_chi2(parameters)` methods
+    # and chi2 = -2 * logLikelihood
     def lnprior(self,parameters, verbose=True):
         """ perfectely flat prior, should be change by inheriting classed"""
         if verbose: print "Perfectly flat prior used. Always 0 (set verbose=False to avoid this message)"
@@ -382,11 +503,11 @@ class ScipyMinuitFitter ( object ):
         
         """
         # -- This enable to fasten the code
-        if len(parameter) == len(self.freeParameters):
+        if len(parameter) == len(self.freeparameters):
             return parameter
         
         ptotal,ip = [],0
-        for name in self.freeParameters:
+        for name in self.freeparameters:
             if "%s_fixed"%name not in dir(self) or\
                eval("self.%s_fixed"%name) is False:
                 ptotal.append(parameter[ip])
@@ -407,7 +528,7 @@ class ScipyMinuitFitter ( object ):
                                     directly to the given `v`_fixed
         """
         scipyGuess,scipyBounds = [],[]
-        for name,g,b in zip(self.freeParameters,
+        for name,g,b in zip(self.freeparameters,
                             guess,bounds):
             if "%s_fixed"%name not in dir(self) or\
                eval("self.%s_fixed"%name) is False:
@@ -416,3 +537,11 @@ class ScipyMinuitFitter ( object ):
                 
         return np.asarray(scipyGuess),np.asarray(scipyBounds)
 
+
+    # ==================== #
+    # = Properties       = #
+    # ==================== #
+    @property
+    def nparam(self):
+        return len(self.freeparameters)
+    
