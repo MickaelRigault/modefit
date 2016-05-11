@@ -23,14 +23,14 @@ except ImportError:
 class BaseFitter( BaseObject ):
     """ Mother class for the fitters """
 
-    PROPERTIES = ["param_input","model","use_minuit"]
-    SIDE_PROPERTIES = []
+    PROPERTIES         = ["param_input","model","use_minuit"]
+    SIDE_PROPERTIES    = []
     DERIVED_PROPERTIES = ["fitvalues","mcmc"]
+
+    
     # ========================= #
     # = Initialization        = #  
     # ========================= #
-    def __init__(self):
-        self.__build__()
 
     # ========================= #
     # = Main Methods          = #  
@@ -525,11 +525,6 @@ class BaseFitter( BaseObject ):
         """ manages the fixed values and how the parametrisation is made """
         self._paramguess_scipy, self._parambounds_scipy = \
           self.model._parameter2scipyparameter_(self.paramguess,self.parambounds)
-
-    
-
-
-
     
 # ========================================== #
 #                                            #

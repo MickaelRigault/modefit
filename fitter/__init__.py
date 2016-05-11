@@ -2,6 +2,6 @@
 
 
 
-from stepfitter import *
+from bimodalfitter import *
 from speclinefitter import *
 

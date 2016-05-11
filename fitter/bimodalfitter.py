@@ -47,7 +47,7 @@ class BimodalFit( BaseFitter ):
     # ========================= #
     def __init__(self,data, errors, proba,
                  names=None, use_minuit=True,
-                 modelName="Binormal"):
+                 modelname="Binormal"):
         """  low-level class to enable to fit a bimodal model on data
         given a probability of each point to belong to a group or the other.
 
@@ -77,7 +77,7 @@ class BimodalFit( BaseFitter ):
             Minuit is the iminuit library.
             If not used, the scipy minimisation is used.
 
-        modelName: [string] - deftault Binormal -
+        modelname: [string] - deftault Binormal -
             The name of the class used to define the bimodal model.
             This name must be an existing class of this library.
 
@@ -91,7 +91,7 @@ class BimodalFit( BaseFitter ):
         # -- for the fit
         # use_minuit has a setter
         self.use_minuit = use_minuit
-        self.set_model(eval("Model%s()"%modelName))
+        self.set_model(eval("Model%s()"%modelname))
 
     def set_data(self,data,errors,proba,names=None):
         """ set the information for the fit.
@@ -175,8 +175,6 @@ class BimodalFit( BaseFitter ):
             }}
         
 
-
-        
     def get_modelchi2(self,parameters):
         """
         = Parses the parameters and return the associated -2 log Likelihood
@@ -347,7 +345,6 @@ class ModelBinormal( BaseModel ):
         parameter = mean_a,sigma_a,mean_b,sigma_b
         return self.get_chi2(parameter)
     
-
 # ========================== #
 #                            #
 #   Step                     #
@@ -356,63 +353,58 @@ class ModelBinormal( BaseModel ):
 class StepFit( BimodalFit ):
     """
     """
+    PROPERTIES = ["x","xcut"]
+    SIDE_PROPERTIES = ["dx"]
+    
     def __init__(self,x,data,errors,
                  proba=None,dx=None,
-                 xcut=None,name=None,**kwargs):
+                 xcut=None,name=None,
+                 use_minuit=None,**kwargs):
         """
         = This class is a child of *BimodalFit* that have the ability to
           use an extra x-axis value to potentially define *proba* if needed
           and to show a *x,data* plot taking into account this probability.
           See further details in ProbaFit_library.BimodalFit
         =
-        x: [array]                 The x-axis where the cut is made between the
-                                   2 populations. If *proba* is not pre-defined,
-                                   this will be used together with xcut to do it.
-                                   This must have the same size as *data*
+        x: [float-array]
+            The x-axis where the cut is made between the 2 populations.
+            If *proba* is not pre-defined, this will be used together
+            with xcut to do it. This must have the same size as *data*
 
-        data: [array]              The data that potentially have a bimodal
-                                   distribution (like a step).
-                                   In case of Cosmological fit, this could be
-                                   the Hubble Residual for instance.
+        data: [float-array]
+            The data that potentially have a bimodal distribution (like a step).
                                    
-        errors: [array]            Errors associated to the *data*.
-                                   This must have the same size as *data*
-
-        # ------- #
+        errors: [float-array]
+            Errors associated to the data.
                               
-        proba: [array/None]        Probability of the data to belong to one
-                                   mode or the other.
-                                   If None, *x* and *xcut* (with *dx* if any)
-                                   will be used to defined *proba*.
-                                   (See self.get_proba)
-                                   If not None, *proba* must have the same size
-                                   as *data*. The probabilies must be float between
-                                   0 and 1.
+        proba: [float-array or None] - optional -
+            (either proba or xcut must be given)
+            Probability of the data to belong to one mode or the other.
+            If None, x and xcut (and dx if any) will be used to defined
+            proba.
+            If not None, proba must be privided. The probabilies must
+            be float between 0 and 1.
                                    
-        name: [array/None]         Name of the given points. Optional.
+        name: [string-array or None] - optional -
+            name of the data points. 
 
         
-        dx: [array/None]           If the x-axis have errors.
-                                   In addition to plot functions, these errors
-                                   will be used if proba have to be defined using
-                                   *x* and *xcut*. CAUTION, this will assume symetric
-                                   gaussian errors. (See self.get_proba).
-                                   This must have the same size as *data (x)* 
+        dx: [float-array or None] - optional -
+            errors on the xaxis. these errors will be used if proba have to
+            be defined using x and xcut.
+            This will assume symetric gaussian errors. (See self.get_proba).
         
-        xcut: [float]              This is were the split is between the 2 populations.
-                                   In addition to plot functions, this value will be
-                                   used if proba have to be defined based on this and
-                                   the corresponding *x* values (and *dx* if
-                                   any self.get_proba).
-                                   IMPORANT: if *proba* is not given. *xcut* must be.
+        xcut: [float or None] - optional -
+            (either proba or xcut must be given)
+            This is were the split is between the 2 populations.
+            This value will be used if proba have to be defined based on this and
+            the x and dx (if any).
 
+        **kwargs goes to the BimodalFit fit (e.g. use_minuit, modelname)
 
-        **kwargs                   goes to the mother __init__ function
-                                   (ProbaFit_library.BimodalFit ; e.g., use_minuit,
-                                   modelName ...)
-
-        = RETURNS =
-        Void, define the object
+        Return
+        -------
+        Void, defines the object
         """
         # -- Init Tests -- #
         if len(x) != len(data):
@@ -425,19 +417,20 @@ class StepFit( BimodalFit ):
         # -- The x Information -- #
         # ----------------------- #
         # -- basic x-stuffs
-        self.x  = np.asarray(x)
-        self.dx = dx if dx is None else np.asarray(dx)
-        self.xcut = xcut
+        self._properties["x"]  = np.asarray(x)
+        self._side_properties["x"] = dx if dx is None else np.asarray(dx)
+        self._properties["xcut"] = xcut
         # -- The Probability given the step location
         if proba is None:
             if xcut is None:
                 raise ValueErrors("You need to give either proba or xcut to enable to define proba")
             proba = self.get_proba()
-
+                    
         # ----------------------- #
         # -- The Mother's Init -- #
         # ----------------------- #
-        super(StepFit,self).__init__(data, errors, proba, **kwargs)
+        super(StepFit,self).__init__(data, errors, proba,
+                                     **kwargs)
         
 
     # ========================= #
@@ -462,7 +455,7 @@ class StepFit( BimodalFit ):
         array of float (between 0 and 1 ;size of x)
         """
         if xcut is not None:
-            self.xcut = xcut
+            self._side_properties['xcut'] = xcut
         
         if self.dx is None: # - faster this way
             return np.asarray([0 if x>self.xcut else 1 for x in self.x])
@@ -500,7 +493,6 @@ class StepFit( BimodalFit ):
 
         show(p)
 
-        
     def show(self,savefile=None,axes=None,#rangey=[-0.6,0.6],
              figure=None,cmap=mpl.cm.ocean,ybihist=True,
              propaxes={},**kwargs):
@@ -609,3 +601,20 @@ class StepFit( BimodalFit ):
                         self.fitout["b"]['mean']+self.fitout["b"]['mean.err'],
                         xmin=cut,
                         color=cmap(0.1,0.2))
+    
+    # ========================= #
+    # = Properties            = #  
+    # ========================= #
+    @property
+    def x(self):
+        """ x-axis of the data """
+        return self._properties["x"]
+    @property
+    def dx(self):
+        """ error along the x-axis of the data """
+        return self._side_properties["dx"]
+    @property
+    def xcut(self):
+        """ split value along the x-axes between two groups """
+        return self._properties["xcut"]
+    
