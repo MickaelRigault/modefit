@@ -3,7 +3,7 @@
 import numpy as N
 from scipy       import stats
 import matplotlib.pyplot as mpl
-from ..lowlevel.bimodalfitter import BimodalFit
+from .bimodalfitter import BimodalFit
 
 __all__ = ["step_fitter"]
 

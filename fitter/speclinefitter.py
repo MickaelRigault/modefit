@@ -6,10 +6,11 @@
 import numpy       as np
 from scipy.special import erf
 from scipy import stats
+import warnings
 from astropy       import constants
 
 # local dependency
-from ..lowlevel.virtualfitter import ScipyMinuitModel,VirtualFitter
+from .virtualfitter import BaseModel,BaseFitter
 
 # astrobject dependencies
 from astrobject.astrobject.spectroscopy import Spectrum
@@ -47,7 +48,7 @@ DICT_EMISSIONLINES = {
 # = usage example          = #
 # ========================== #
 def fit_spectrumlines(spectrum_file,zguess=None,modelName="HaNIICont",
-                    fitprop={},**kwargs):
+                      fit=True,fitprop={},**kwargs):
     """ fit a lineModel and the given Spectrum
 
     Parameters
@@ -81,21 +82,17 @@ def fit_spectrumlines(spectrum_file,zguess=None,modelName="HaNIICont",
     fitLine object, which is a child of the Spectrum object
     """
     lin = LinesFitter(spectrum_file,modelName=modelName,**kwargs)
-    lin.fit(velocity_guess=zguess * CLIGHT, **fitprop)
+    if fit:
+        lin.fit(velocity_guess=zguess * CLIGHT, **fitprop)
     
     return lin
-
-
-
 
 
 # ========================== #
 # = Internal Functions     = #
 # ========================== #
 def get_lines_spectrum(x0_s,sigma_s,A_s,X,**kwargs):
-    """
-    == This Function enable to Stack a bunch of emission lines =
-    => See `lines` for complementary documentation
+    """ combine emission lines into a multiple gaussian array
 
     Parameters:
     -----------
@@ -148,7 +145,6 @@ def get_lines_spectrum(x0_s,sigma_s,A_s,X,**kwargs):
     return np.sum([ A* line(x0,sigma,X,**kwargs)
                     for x0,sigma,A in zip(x0s,sigmas,As)],
                     axis=0)
-    
 
 def line(x0,sigma,X,normalized=False,
          velocity_step=False,sigma_x0unit=False):
@@ -257,7 +253,6 @@ def lnprior_velocity(velocity, velocity_bounds):
         return -np.inf
     return 0
 
-
 def lnprior_dispersion_flat(dispersion, dispersion_bounds):
     """ flat priors (in log) within the given boundaries
     this returns 0 if the dispersion is within the boundaries
@@ -287,7 +282,7 @@ def lnprior_dispersion(dispersion, loc=170, scale=20):
 #                                                      #
 ########################################################
 
-class LinesFitter( Spectrum, VirtualFitter ):
+class LinesFitter( Spectrum, BaseFitter ):
     """ object to enable the fit the line using the
     model in lineModels. The fitting technique is based on
     the Virtual ScipyMinuit Classes in Fitter_library.
@@ -304,11 +299,13 @@ class LinesFitter( Spectrum, VirtualFitter ):
         #
         # Add the model parameters
         #
-        print "OpticalLines_%s(verbose=False)"%modelName
-        self.model = eval("OpticalLines_%s()"%modelName)
-        self.model.get_chi2 = self.get_modelchi2
-
-        super(LinesFitter,self).__init__(filename=filename,**kwargs)
+        
+        self.set_model(eval("OpticalLines_%s()"%modelName))
+        
+        # We did build before this avoids the build warnings.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            super(LinesFitter,self).__init__(filename=filename,**kwargs)
 
         # -- For the fit
         self.use_minuit = use_minuit
@@ -353,7 +350,7 @@ class LinesFitter( Spectrum, VirtualFitter ):
     # =========================== #
     # = Hack of VirtualFitter   = #
     # =========================== #
-    @_autogen_docstring_inheritance(VirtualFitter.fit,"VirtualFitter.fit")
+    @_autogen_docstring_inheritance(BaseFitter.fit,"BaseFitter.fit")
     def fit(self,*args,**kwargs):
         #
         # - Fitting acceptance
@@ -370,24 +367,24 @@ class LinesFitter( Spectrum, VirtualFitter ):
         
 
     
-    @_autogen_docstring_inheritance(VirtualFitter.setup_guesses,"VirtualFitter.setup_guesses")
+    @_autogen_docstring_inheritance(BaseFitter.setup_guesses,"BaseFitter.setup_guesses")
     def setup_guesses(self,**kwargs):
         #
         # Add default velocity boundaries
         #
         super(LinesFitter,self).setup_guesses(**kwargs)
         if "velocity" in self.model.freeparameters and self.model.velocity_boundaries == [None,None]:
-            self.model.velocity_boundaries = [self.model.velocity_guess - self.model._velocity_boundWidth,
-                                              self.model.velocity_guess + self.model._velocity_boundWidth]
-            self._guesses["velocity_boundaries"] = self.model.velocity_boundaries
+            self.model.velocity_boundaries = [self.model.velocity_guess - self.model.VELOCITY_BOUNDWINDOW,
+                                              self.model.velocity_guess + self.model.VELOCITY_BOUNDWINDOW]
+            self.param_input["velocity_boundaries"] = self.model.velocity_boundaries
             
-    @_autogen_docstring_inheritance(VirtualFitter._fit_readout_,"VirtualFitter._fit_readout_")
+    @_autogen_docstring_inheritance(BaseFitter._fit_readout_,"BaseFitter._fit_readout_")
     def _fit_readout_(self):
         #
         # Add Normalisation information
         #
         super(LinesFitter,self)._fit_readout_()
-        self.dof       = len(self.model.y[self.model.lbda_mask])-self.model.nParam + \
+        self.dof       = len(self.model.y[self.model.lbda_mask])-self.model.nparam + \
           len(np.argwhere(np.asarray(self.paramfixed,dtype='bool')))
         if "object" in dir(self) and \
           self.object is not None and self.object!="unknown":
@@ -404,29 +401,30 @@ class LinesFitter( Spectrum, VirtualFitter ):
         **kwargs goes to updateModel
         """
         
-        self.model.update(*self.model.parameters2updateInput(parameters),
+        self.model.update(*self.model.parse_parameters(parameters),
                           **kwargs)
         
         return self.yfit - self.model.y
 
     def get_modelchi2(self,parameters,**kwargs):
-        """
-        = The Chi2 model that has to be given to the model. =
+        """ chi2 model that has to be given to the model
 
+        if a variance is defined, a Chi2/dof is used (least square otherwise)
         
-        parameters: [array]         *ampl*, *velocity_km_s*, *dispersion*
-                                    ampl = Amplitude array
-                                    velocity_km_s = float [in km/s]
-                                    dispersion = float [in km/s]
-
-        = INFORMATION =
-        -CHI2-
-        if a variance is defined, a Chi2/dof is adjusted ;  otherwise, it's a least square
-        
-        -MASK-
         The wavelength mask of the model will be applied, such that
         the chi2 is measured only for the modeled spectral regions.
-        => see opticalLines.generate_wavelength_mask()        
+        => see opticalLines.generate_wavelength_mask()
+
+        Parameters
+        ----------
+        parameters: [array]
+            [ampl, velocity_km_s, dispersion]:
+              * ampl = Amplitude array
+              * velocity_km_s = float [in km/s]
+              * dispersion = float [in km/s]
+        Returns
+        -------
+        float (chi2)
         """
         res = self.get_residual(parameters,**kwargs)
         if self.has_var:
@@ -511,8 +509,8 @@ class LinesFitter( Spectrum, VirtualFitter ):
         self.show(savefile="_dont_show_",**kwargs)
         zguess    = self.model.velocity_guess / CLIGHT
         zmeasured = self.minuit.values["velocity"] / CLIGHT
-        guessed_Halpha  = self.model.eLinesLambda[self.model._indexHalpha] * (1+zguess)
-        measured_Halpha = self.model.eLinesLambda[self.model._indexHalpha] * (1+zmeasured)
+        guessed_Halpha  = self.model.linewave[self.model._indexHalpha] * (1+zguess)
+        measured_Halpha = self.model.linewave[self.model._indexHalpha] * (1+zmeasured)
         
         self._plot["ax"].axvline(guessed_Halpha,color="k",alpha=0.2)
         self._plot["ax"].ax.axvline(measured_Halpha,color=self._modelColor,alpha=0.2)
@@ -538,8 +536,8 @@ class LinesFitter( Spectrum, VirtualFitter ):
         
         # -- Only Halpha and OII Known -- #
         
-        guessed_Ha  = self.model.eLinesLambda[self.model._indexHalpha] * (1+self.model.velocity_guess/CLIGHT)
-        guessed_OII1     = self.model.eLinesLambda[self.model._indexOII1]  * (1+self.model.velocity_guess/CLIGHT)
+        guessed_Ha  = self.model.linewave[self.model._indexHalpha] * (1+self.model.velocity_guess/CLIGHT)
+        guessed_OII1     = self.model.linewave[self.model._indexOII1]  * (1+self.model.velocity_guess/CLIGHT)
         flagHa = (self.lbda> guessed_Ha-wavelength_window) &(self.lbda< guessed_Ha+wavelength_window)
         flagOII = (self.lbda> guessed_OII1-wavelength_window) &(self.lbda< guessed_OII1+wavelength_window)
         
@@ -606,10 +604,10 @@ class LinesFitter( Spectrum, VirtualFitter ):
         axOII.set_ylim(ymin,ymax*1.1)
 
         for line in ["HA","NII_1","NII_2","OII1","OII2"]:
-            linindex = np.argwhere(self.model.eLinesNames == line)[0][0]
-            axHa.axvline(self.model.eLinesLambda[linindex]*(1+self.fitvalues["velocity"]/CLIGHT),
+            linindex = np.argwhere(self.model.LINENAMES == line)[0][0]
+            axHa.axvline(self.model.linewave[linindex]*(1+self.fitvalues["velocity"]/CLIGHT),
                                  color="0.7",alpha=0.5)
-            axOII.axvline(self.model.eLinesLambda[linindex]*(1+self.fitvalues["velocity"]/CLIGHT),
+            axOII.axvline(self.model.linewave[linindex]*(1+self.fitvalues["velocity"]/CLIGHT),
                                  color="0.7",alpha=0.5)
         # -------------------- #
         # - Fancy it         - #
@@ -634,41 +632,57 @@ class LinesFitter( Spectrum, VirtualFitter ):
 #  Mother Class    = #
 # ================== #
 class _OpticalLines_( Spectrum ):
-    """
-    """
-    # -- General Information
-    _dict_eLines  = DICT_EMISSIONLINES
-    eLinesNames   = np.asarray(["OII1", "OII2","HN","HC","HE","HD","HG","HB",
+    """ """
+
+    PROPERTIES = []
+    SIDE_PROPERTIES = []
+    DERIVED_PROPERTIES = ["lbda_mask","nampl"]
+    # ---------
+    # - Add on
+    LINENAMES   = np.asarray(["OII1", "OII2","HN","HC","HE","HD","HG","HB",
                     "OIII_1","OIII_2","HA","NII_1","NII_2",
                     "SII1","SII2"])
-    eLinesLambda  = np.asarray([DICT_EMISSIONLINES[k] for k in
-                    eLinesNames])
-    nOpticalLines = len(eLinesNames)
+    COMBINEDLINES = ["NII","OIII"]
+    # -- Default velocity boundaries
+    VELOCITY_BOUNDWINDOW = 2000
+    # -- Analyzed Wavelength Area
+    KEPT_WAVEWIDTH   = 80 # in Angstrom
+
     
     # -- Generic values
     dispersion_guess      = 150
     dispersion_boundaries = [50,250]
 
-    _velocity_boundWidth   = 2000
-    # -- Analyzed Wavelength Area
-    keepedLines   = eLinesNames
-    keepedWidth   = 80 # in Angstrom
-
-    
-    @_autogen_docstring_inheritance(Spectrum.__init__,"Spectrum.__init__")
-    def __init__(self,*args,**kwargs):
+    # ========================= #
+    # = Initialization        = #  
+    # ========================= #
+    def __build__(self,*args,**kwargs):
+        """ """
+        super(_OpticalLines_,self).__build__(*args,**kwargs)
         
         for name in self.freeparameters:
-            if name in self.eLinesNames:
+            if name in self.LINENAMES:
                 self.__dict__['%s_boundaries'%name] = [0,None]
-            
-        super(_OpticalLines_,self).__init__(*args,**kwargs)
-        # -- Generate default Amplitude
         
-    
+
+    # ========================= #
+    # = Main Methods          = #  
+    # ========================= #
+    def parse_parameters(self,parameters):
+        """ Generique function that works only if the model is made
+        of emission line amplitudes and velocity+dispersion.
+        This converts the given parameter into a readable
+        self.update input.
+        Return
+        -------
+        [amplitude array], velocity, dispersion
+        """
+        return parameters[:-2],parameters[-2],parameters[-1]
+
+            
     def update(self,ampl,velocity_km_s,
                dispersion,**kwargs):
-        """ create the spectrum 
+        """ create the spectrum based on the given parameters
 
         Parameters
         ---------- 
@@ -696,15 +710,7 @@ class _OpticalLines_( Spectrum ):
         self.y =  self.get_spectral_flux(ampl,velocity_km_s,
                                         dispersion,**kwargs)
         
-        if "lbda_mask" not in dir(self):
-            self.generate_wavelength_mask()
-
-    def parameters2updateInput(self,parameters):
-        """ Generique function that works only if the model is made
-          of emission line amplitudes and velocity+dispersion
-        """
-        return parameters[:-2],parameters[-2],parameters[-1]
-          
+    # update and this are splited to allow easy inheritance.
     def get_spectral_flux(self,ampl,velocity_km_s,dispersion,
                           dispersion_inPixel=False):
         """ creates the spectral flux model
@@ -727,63 +733,21 @@ class _OpticalLines_( Spectrum ):
             (km/s or pixel if dispersion_inPixel is True)
             This width of the emission lines (sigma of the gaussian)
                  
-        
         dispersion_inPixel: [bool]
             = default is False =
             Set to True if the dispersion is given in pixel rather than if km/s
-        
         
         Returns
         -------
         flux [array of the same size as self.lbda]
         """
-        if "lbda" not in dir(self):
-            raise ValueError("You need to define the wavelength first")
-        
-        self.eLines_currentAmpl = self.read_amplitudes(ampl)
-        self.eLines_currentZeff = velocity_km_s / CLIGHT
-        self.eLines_currentDisp = dispersion
-        
-        return  get_lines_spectrum(self.eLinesLambda*(1. + self.eLines_currentZeff),
-                                      self.eLines_currentDisp,
-                                      self.eLines_currentAmpl,
-                                      self.lbda,normalized=True,
-                                      sigma_x0unit = dispersion_inPixel,
-                                      velocity_step = self.has_velocity_step())
+        return  get_lines_spectrum(self.linewave*(1. + velocity_km_s / CLIGHT),
+                                   dispersion,
+                                   self.read_amplitudes(ampl),
+                                   self.lbda,normalized=True,
+                                   sigma_x0unit = dispersion_inPixel,
+                                   velocity_step = self.has_velocity_step())
     
-    def generate_wavelength_mask(self):
-        """ load the wavelength Mask of the Model
-        
-        All the wavelength will be masked except the one corresponding
-        to the emission-line listed in self.keepedLines. A acceptance of
-        self.keepedWidth won't be mask around this lines.
-
-        = Information =
-        A Child Model only needs to reset self.keepedLines to change
-        the mask on its will.
-        self.keepedWidth shall be change with care.
-        
-        
-        Returns
-        -------
-        void ; loads self.lbda_mask
-        """
-        if "lbda" not in dir(self):
-            raise AttributeError("No wavelength (lbda) has been defined yet. see set_lbda")
-            
-            
-        self.lbda_mask = np.asarray(np.zeros(len(self.lbda)),dtype = "bool")
-        if "velocity_guess" not in dir(self):
-            print "WARNING No velocity guess given, 0 is set"
-            self.velocity_guess = 0
-            
-        redshift = ( 1. + self.velocity_guess / CLIGHT )
-        for line in self.keepedLines:
-            index = np.argwhere(self.eLinesNames == line)[0][0]
-            flagkept = (self.lbda > (self.eLinesLambda[index]*redshift - self.keepedWidth))\
-               & ((self.lbda < self.eLinesLambda[index]*redshift + self.keepedWidth))
-            self.lbda_mask[flagkept] = True
-
     # ----------------
     # - Bayesian Touch
     def lnprior(self,parameters):
@@ -792,32 +756,86 @@ class _OpticalLines_( Spectrum ):
         prior function from the module
         lnprior_amplitudes, lnprior_velocity, lnprior_dispersion
         """
-        amplitudes,velocity,dispersion = self.parameters2updateInput(parameters)
+        amplitudes,velocity,dispersion = self.parse_parameters(parameters)
         
         return lnprior_amplitudes(amplitudes) + lnprior_velocity(velocity,self.velocity_boundaries)+ \
           lnprior_dispersion(dispersion)
 
+    # ================= #
+    # = Properties    = #
+    # ================= #
+    @property
+    def _nopticallines(self):
+        return len(self.LINENAMES)
 
+    @property
+    def linewave(self):
+        """ array of the emmission line waves """
+        return np.asarray([DICT_EMISSIONLINES[k] for k in
+                    self.LINENAMES])
 
+    @property
+    def usedlines(self):
+        """ sorted list of the used lines """
+        return np.concatenate([[l] if l not in self.COMBINEDLINES else [l+"_1",l+"_2"]  for
+                               l in self.freeparameters if l in self.LINENAMES
+                               or l in self.COMBINEDLINES])
+    @property
+    def nampl(self):
+        """ number of amplitude parameters. """
+        # this is stored because if is call at each fitting iteration.
+        if self._derived_properties["nampl"] is None:
+            self._derived_properties["nampl"] = len([l for l in self.freeparameters
+                                  if l in self.COMBINEDLINES or l in self.LINENAMES])
+        return self._derived_properties["nampl"]
     
+    # --------------
+    # - Da Mask
+    @property
+    def lbda_mask(self):
+        """ mask for the wavelength array.
+
+        All the wavelength will be masked except the one corresponding
+        to the emission-line listed in self.usedlines. A acceptance of
+        self.KEPT_WAVEWIDTH won't be mask around this lines.
+
+        This mask is generated the first time is it called.
+        """
+        if self._derived_properties['lbda_mask'] is None:
+            self._derived_properties['lbda_mask'] = np.asarray(np.zeros(len(self.lbda)),dtype = "bool")
+            if "velocity_guess" not in dir(self):
+                warnings.warns("No velocity guess given, 0 is set while loaded the lbda_mask")
+                velocity_guess = 0
+            else:
+                velocity_guess = self.velocity_guess
+                
+            redshift = ( 1. + velocity_guess / CLIGHT )
+            for line in self.usedlines:
+                index = np.argwhere(self.LINENAMES == line)[0][0]
+                flagkept = (self.lbda > (self.linewave[index]*redshift - self.KEPT_WAVEWIDTH))\
+                & ((self.lbda < self.linewave[index]*redshift + self.KEPT_WAVEWIDTH))
+                self._derived_properties['lbda_mask'][flagkept] = True
+                
+        return self._derived_properties['lbda_mask']
+
+
 # =================================== #
 # =  Models                         = #
 # =================================== #
-class OpticalLines_Basic( _OpticalLines_,ScipyMinuitModel ):
+class OpticalLines_Basic( _OpticalLines_,BaseModel ):
     """
     """
-    freeparameters = ["OII1","OII2","HN","HC","HE","HD","HG","HB",
+    FREEPARAMETERS = ["OII1","OII2","HN","HC","HE","HD","HG","HB",
                        "OIII","HA","NII","SII1","SII2",
                        "velocity","dispersion"]
     
-    _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
-    _indexNIIR    = np.argwhere(_OpticalLines_.eLinesNames == "NII_2")[0][0]
-    _indexNIIB    = np.argwhere(_OpticalLines_.eLinesNames == "NII_1")[0][0]
-    _indexOII1    = np.argwhere(_OpticalLines_.eLinesNames == "OII1")[0][0]
-    _indexOII2    = np.argwhere(_OpticalLines_.eLinesNames == "OII2")[0][0]
+    _indexHalpha  = np.argwhere(_OpticalLines_.LINENAMES == "HA")[0][0]
+    _indexNIIR    = np.argwhere(_OpticalLines_.LINENAMES == "NII_2")[0][0]
+    _indexNIIB    = np.argwhere(_OpticalLines_.LINENAMES == "NII_1")[0][0]
+    _indexOII1    = np.argwhere(_OpticalLines_.LINENAMES == "OII1")[0][0]
+    _indexOII2    = np.argwhere(_OpticalLines_.LINENAMES == "OII2")[0][0]
 
-    nParam = len(freeparameters)
-    nAmpl  = nParam -2
+
     # ==================== #
     # =  Model           = #
     # ==================== #
@@ -830,7 +848,7 @@ class OpticalLines_Basic( _OpticalLines_,ScipyMinuitModel ):
         ampl: [array of float]
             = amplitudes of the 13 lines =
             Give a list of amplitude for all the line, from the bluest to
-            the reddest ; see self.eLinesNames
+            the reddest ; see self.LINENAMES
             This Model:
                `ampl` does not contain OIII-red nor NII-Blue, which amplitude
                are fixed-ratio amplitude doublette
@@ -842,17 +860,15 @@ class OpticalLines_Basic( _OpticalLines_,ScipyMinuitModel ):
         Returns
         -------
         array of float ; the amplitudes of the emission lines.
-        (See self.eLinesNames)
+        (See self.LINENAMES)
         """
-        if len(ampl) != self.nAmpl:
+        if len(ampl) != self.nampl:
             print ampl
-            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nAmpl,len(ampl)))
+            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nampl,len(ampl)))
         
         ampl_ = ampl.copy()
-
         ampl_ = np.insert(ampl_,9,ampl_[8]*2.98) # add associated OIII (add 5007)
         ampl_ = np.insert(ampl_,11,ampl_[11]*0.34) # add associated NII  (add 6548)
-        
 
         return np.asarray(ampl_)*global_ampl
 
@@ -877,19 +893,14 @@ class OpticalLines_Basic( _OpticalLines_,ScipyMinuitModel ):
 # ------------------------------- #
 # --   Halpha NII  Model       -- #
 # ------------------------------- #
-class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitModel  ):
+class OpticalLines_HaNII( _OpticalLines_,BaseModel  ):
     """
     """
-    freeparameters = ["HA","NII", "velocity","dispersion"]
+    FREEPARAMETERS = ["HA","NII", "velocity","dispersion"]
     
-    nParam = len(freeparameters)
-    nAmpl  = nParam - 2
-    _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
-    _indexNIIR    = np.argwhere(_OpticalLines_.eLinesNames == "NII_2")[0][0]
-    _indexNIIB    = np.argwhere(_OpticalLines_.eLinesNames == "NII_1")[0][0]
-
-    # -- Analyzed Wavelength Area
-    keepedLines   = ["HA","NII_1","NII_2"]
+    _indexHalpha  = np.argwhere(_OpticalLines_.LINENAMES == "HA")[0][0]
+    _indexNIIR    = np.argwhere(_OpticalLines_.LINENAMES == "NII_2")[0][0]
+    _indexNIIB    = np.argwhere(_OpticalLines_.LINENAMES == "NII_1")[0][0]
 
     # ==================== #
     # =  Model           = #
@@ -901,7 +912,7 @@ class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitModel  ):
         Parameters
         ----------
         ampl: [array of float]
-            = amplitudes of the 2 lines  =
+            = amplitudes of the lines  =
             Give a list of amplitude for all the Halpha and NII lines
             This Model:
                 `ampl` Only Contains 1 NII line amplitude since the 2
@@ -915,12 +926,12 @@ class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitModel  ):
         Returns
         --------
         array of float ; the amplitudes of the emission lines.
-        (See self.eLinesNames)
+        (See self.LINENAMES)
         """
-        if len(ampl) != self.nAmpl:
-            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nAmpl,len(ampl)))
+        if len(ampl) != self.nampl:
+            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nampl,len(ampl)))
 
-        ampl_ = np.zeros(self.nOpticalLines)
+        ampl_ = np.zeros(self._nopticallines)
         ampl_[self._indexHalpha] = ampl[0]
         ampl_[self._indexNIIR]   = ampl[1]
         ampl_[self._indexNIIB]   = ampl[1]*0.34
@@ -946,11 +957,10 @@ class OpticalLines_HaNII( _OpticalLines_,ScipyMinuitModel  ):
 class OpticalLines_HaNIICont( OpticalLines_HaNII ):
     """
     """
-    freeparameters = ["HA","NII",
+    FREEPARAMETERS = ["HA","NII",
                       "cont0","contSlope",
                       "velocity","dispersion"]
     
-    nParam = len(freeparameters)
     
     contSlope_guess = 0
     contSlope_fixed = True
@@ -964,7 +974,7 @@ class OpticalLines_HaNIICont( OpticalLines_HaNII ):
         cont = self.cont0 + self.contSlope*self.lbda
         return flux + cont
     
-    def parameters2updateInput(self,parameters):
+    def parse_parameters(self,parameters):
         """ Generique function that works only if the model is made
         of emission line amplitudes and velocity+dispersion
         """
@@ -987,27 +997,28 @@ class OpticalLines_HaNIICont( OpticalLines_HaNII ):
 # ------------------------------- #
 # --  Halpha NII  Model Balmer -- #
 # ------------------------------- #
-class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitModel ):
+class OpticalLines_BalmerSerie(  _OpticalLines_,BaseModel ):
     """
     """
-    freeparameters = ["HA","NII",
+    FREEPARAMETERS = ["HA","NII",
                       "ebmv","Rv",
                       "velocity","dispersion"]
     
-    nParam = len(freeparameters)
-    nAmpl  = nParam - 4
     
-    _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
-    _indexHbeta   = np.argwhere(_OpticalLines_.eLinesNames == "HB")[0][0]
-    _indexHgamma  = np.argwhere(_OpticalLines_.eLinesNames == "HG")[0][0]
-    _indexHdelta  = np.argwhere(_OpticalLines_.eLinesNames == "HD")[0][0]
-    _indexHepsilon= np.argwhere(_OpticalLines_.eLinesNames == "HE")[0][0]
-    _indexNIIR    = np.argwhere(_OpticalLines_.eLinesNames == "NII_2")[0][0]
-    _indexNIIB    = np.argwhere(_OpticalLines_.eLinesNames == "NII_1")[0][0]
+    _indexHalpha  = np.argwhere(_OpticalLines_.LINENAMES == "HA")[0][0]
+    _indexHbeta   = np.argwhere(_OpticalLines_.LINENAMES == "HB")[0][0]
+    _indexHgamma  = np.argwhere(_OpticalLines_.LINENAMES == "HG")[0][0]
+    _indexHdelta  = np.argwhere(_OpticalLines_.LINENAMES == "HD")[0][0]
+    _indexHepsilon= np.argwhere(_OpticalLines_.LINENAMES == "HE")[0][0]
+    _indexNIIR    = np.argwhere(_OpticalLines_.LINENAMES == "NII_2")[0][0]
+    _indexNIIB    = np.argwhere(_OpticalLines_.LINENAMES == "NII_1")[0][0]
 
     # -- Analyzed Wavelength Area
-    keepedLines   = ["HA","HB","HG","HD","HE",
-                     "NII_1","NII_2"]
+    @property
+    def usedlines(self):
+        """ special line case """
+        return ["HA","HB","HG","HD","HE", "NII_1","NII_2"]
+    
     # using http://cdsads.u-strasbg.fr/abs/1971Ap%26SS..10..383G
     #   - averaged 1 and 2 to fit the known usual ratio Ralpha/beta = 2.8
     Ralphabeta    = 3.0  # could be up to 3.1
@@ -1047,29 +1058,29 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitModel ):
         Returns
         -------
         array of float ; the amplitudes of the emission lines.
-        (See self.eLinesNames)
+        (See self.LINENAMES)
         """
-        if len(ampl) != self.nAmpl:
-            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nAmpl,len(ampl)))
+        if len(ampl) != self.nampl:
+            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nampl,len(ampl)))
         self.load_extinction() # this is skiped is already loaded
         
-        ampl_ = np.zeros(self.nOpticalLines)
+        ampl_ = np.zeros(self._nopticallines)
         
-        ampl_[self._indexHalpha] = ampl[0] * self.extinctionFactor(self.eLinesLambda[self._indexHalpha],
+        ampl_[self._indexHalpha] = ampl[0] * self.extinctionFactor(self.linewave[self._indexHalpha],
                                                                    self.ebmv,self.Rv)
-        ampl_[self._indexNIIR]   = ampl[1] * self.extinctionFactor(self.eLinesLambda[self._indexNIIR],
+        ampl_[self._indexNIIR]   = ampl[1] * self.extinctionFactor(self.linewave[self._indexNIIR],
                                                                    self.ebmv,self.Rv)
-        ampl_[self._indexNIIB]   = ampl[1]*0.34 * self.extinctionFactor(self.eLinesLambda[self._indexNIIB],
+        ampl_[self._indexNIIB]   = ampl[1]*0.34 * self.extinctionFactor(self.linewave[self._indexNIIB],
                                                                         self.ebmv,self.Rv)
           
         # - rest of the Balmer Serie
-        ampl_[self._indexHbeta]  = ampl[0] / self.Ralphabeta      * self.extinctionFactor(self.eLinesLambda[self._indexHbeta],
+        ampl_[self._indexHbeta]  = ampl[0] / self.Ralphabeta      * self.extinctionFactor(self.linewave[self._indexHbeta],
                                                                                         self.ebmv,self.Rv)
-        ampl_[self._indexHgamma] = ampl[0] / self.Ralphagamma     * self.extinctionFactor(self.eLinesLambda[self._indexHgamma],
+        ampl_[self._indexHgamma] = ampl[0] / self.Ralphagamma     * self.extinctionFactor(self.linewave[self._indexHgamma],
                                                                                         self.ebmv,self.Rv)
-        ampl_[self._indexHdelta] = ampl[0] / self.Ralphadelta     * self.extinctionFactor(self.eLinesLambda[self._indexHdelta],
+        ampl_[self._indexHdelta] = ampl[0] / self.Ralphadelta     * self.extinctionFactor(self.linewave[self._indexHdelta],
                                                                                         self.ebmv,self.Rv)
-        ampl_[self._indexHepsilon] = ampl[0] / self.Ralphaepsilon * self.extinctionFactor(self.eLinesLambda[self._indexHepsilon],
+        ampl_[self._indexHepsilon] = ampl[0] / self.Ralphaepsilon * self.extinctionFactor(self.linewave[self._indexHepsilon],
                                                                                         self.ebmv,self.Rv)
 
         return np.asarray(ampl_)*global_ampl
@@ -1095,7 +1106,7 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitModel ):
     # -------------------- #
     # -  Fit Tricks      - #
     # -------------------- #
-    def parameters2updateInput(self,parameters):
+    def parse_parameters(self,parameters):
         """ Generique function that works only if the model is made
         of emission line amplitudes and velocity+dispersion
         """
@@ -1118,26 +1129,22 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,ScipyMinuitModel ):
 # ------------------------------- #
 # --   Halpha NII  Model       -- #
 # ------------------------------- #
-class OpticalLines_Mains( _OpticalLines_,ScipyMinuitModel  ):
+class OpticalLines_Mains( _OpticalLines_,BaseModel  ):
     """
     """
-    freeparameters = ["HA","NII","OII1","OII2","SII1","SII2",
+    FREEPARAMETERS = ["HA","NII","OII1","OII2","SII1","SII2",
                        "velocity","dispersion"]
     
-    nParam = len(freeparameters)
-    nAmpl  = nParam - 2
-    _indexHalpha  = np.argwhere(_OpticalLines_.eLinesNames == "HA")[0][0]
-    _indexNIIR    = np.argwhere(_OpticalLines_.eLinesNames == "NII_2")[0][0]
-    _indexNIIB    = np.argwhere(_OpticalLines_.eLinesNames == "NII_1")[0][0]
+    _indexHalpha  = np.argwhere(_OpticalLines_.LINENAMES == "HA")[0][0]
+    _indexNIIR    = np.argwhere(_OpticalLines_.LINENAMES == "NII_2")[0][0]
+    _indexNIIB    = np.argwhere(_OpticalLines_.LINENAMES == "NII_1")[0][0]
     
-    _indexOII1    = np.argwhere(_OpticalLines_.eLinesNames == "OII1")[0][0]
-    _indexOII2    = np.argwhere(_OpticalLines_.eLinesNames == "OII2")[0][0]
+    _indexOII1    = np.argwhere(_OpticalLines_.LINENAMES == "OII1")[0][0]
+    _indexOII2    = np.argwhere(_OpticalLines_.LINENAMES == "OII2")[0][0]
 
-    _indexSII1    = np.argwhere(_OpticalLines_.eLinesNames == "SII1")[0][0]
-    _indexSII2    = np.argwhere(_OpticalLines_.eLinesNames == "SII2")[0][0]
+    _indexSII1    = np.argwhere(_OpticalLines_.LINENAMES == "SII1")[0][0]
+    _indexSII2    = np.argwhere(_OpticalLines_.LINENAMES == "SII2")[0][0]
 
-    # -- Analyzed Wavelength Area
-    keepedLines   = ["HA","NII_1","NII_2","OII1","OII2","SII1","SII2"]
 
     # ==================== #
     # =  Model           = #
@@ -1163,12 +1170,12 @@ class OpticalLines_Mains( _OpticalLines_,ScipyMinuitModel  ):
 
         Returns
         -------
-        array of float ; the amplitudes of the emission lines. See self.eLinesNames
+        array of float ; the amplitudes of the emission lines. See self.LINENAMES
         """
-        if len(ampl) != self.nAmpl:
-            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nAmpl,len(ampl)))
+        if len(ampl) != self.nampl:
+            raise ValueError("ampl must have exactly %d entry. %d given"%(self.nampl,len(ampl)))
 
-        ampl_ = np.zeros(self.nOpticalLines)
+        ampl_ = np.zeros(self._nopticallines)
         ampl_[self._indexHalpha] = ampl[0]
         ampl_[self._indexNIIR]   = ampl[1]
         ampl_[self._indexNIIB]   = ampl[1]*0.34 # bound together
