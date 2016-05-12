@@ -6,8 +6,9 @@
 import numpy        as np
 from scipy          import stats
 import matplotlib.pyplot as mpl
+# - local dependencies
 from ..utils.tools  import kwargs_update
-from .virtualfitter import BaseModel,BaseFitter
+from .baseobjects import BaseModel,BaseFitter
 
 
 __all__ = ["stepfit"]

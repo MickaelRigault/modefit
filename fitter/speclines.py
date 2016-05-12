@@ -10,7 +10,7 @@ import warnings
 from astropy       import constants
 
 # local dependency
-from .virtualfitter import BaseModel,BaseFitter
+from .baseobjects import BaseModel,BaseFitter
 
 # astrobject dependencies
 from astrobject.astrobject.spectroscopy import Spectrum
