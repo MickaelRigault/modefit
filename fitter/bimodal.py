@@ -40,7 +40,7 @@ class BimodalFit( BaseFitter ):
     """ """
 
     PROPERTIES         = ["data","errors","proba"]
-    SIDE_PROPERTIES    = []
+    SIDE_PROPERTIES    = ["names"]
     DERIVED_PROPERTIES = []
     
     # ========================= #
