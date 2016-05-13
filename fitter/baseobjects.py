@@ -209,7 +209,8 @@ class BaseFitter( BaseObject ):
     # ------------------- #
     # - Bayes & MCMC    - #
     # ------------------- # 
-    def run_mcmc(self,nrun=2000, walkers_per_dof=3):
+    def run_mcmc(self,nrun=2000, walkers_per_dof=3,
+                 init=None,init_err=None):
         """ run mcmc from the emcee python code. This might take time
 
         Parameters
@@ -236,10 +237,17 @@ class BaseFitter( BaseObject ):
         self.mcmc["nrun"] = nrun
         
         # -- init the walkers
-        fitted = np.asarray([self.fitvalues[name] for name in self.model.freeparameters])
-        err    = np.asarray([self.fitvalues[name+".err"] for name in self.model.freeparameters])
-        self.mcmc["pos_init"] = self._fitparams
-        self.mcmc["pos"] = [self._fitparams + np.random.randn(self.mcmc["ndim"])*err for i in range(self.mcmc["nwalkers"])]
+        
+        init_err = np.asarray([self.fitvalues[name+".err"]
+                               for name in self.model.freeparameters]) if init_err is None \
+                               else np.asarray(init_err)
+            
+        self.mcmc["pos_init"] = np.asarray([self.fitvalues[name]
+                                            for name in self.model.freeparameters]) \
+                                            if init is None else np.asarray(init)
+        
+        self.mcmc["pos"] = [self.mcmc["pos_init"] + np.random.randn(self.mcmc["ndim"])*init_err
+                            for i in range(self.mcmc["nwalkers"])]
         # -- run the mcmc        
         self.mcmc["sampler"] = emcee.EnsembleSampler(self.mcmc["nwalkers"], self.mcmc["ndim"], self.model.lnprob)
         _ = self.mcmc["sampler"].run_mcmc(self.mcmc["pos"], self.mcmc["nrun"])
