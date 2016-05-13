@@ -18,11 +18,15 @@ except ImportError:
 
 class MCMC( BaseObject ):
     """ Class Gathering the MCMC run output. based on emcee """
-    PROPERTIES         = ["lnprop","freeparameters",
-                         "nrun","nwalkers","burnin", "guess"]
-    SIDE_PROPERTIES    = ["posinit_err"]
-    DERIVED_PROPERTIES = ["poswalkers"]
-
+    
+    # BaseObject global variables
+    PROPERTIES         = ["lnprob","freeparameters","runprop",
+                          "burnin","properties"]
+    SIDE_PROPERTIES    = []
+    DERIVED_PROPERTIES = ["sampler","poswalkers"]
+    # MCMC global variables
+    RUN_PROPERTIES = ["guess","guess_err","nrun","nwalkers"]
+    
     # ========================= #
     #   Initialization          #
     # ========================= #
@@ -30,72 +34,145 @@ class MCMC( BaseObject ):
     def __init__(self, lnprob, freeparameters,
                  guess=None,guess_err=None):
         """ """
-        self._properties["lnprop"] = lnprob
+        self._properties["lnprob"] = lnprob
         self._properties["freeparameters"] = freeparameters
         
     # ========================= #
     #   Main Methods            #
     # ========================= #
-    def setup(self, nrun=None, nwalkers=None,
-              guess=None,guess_err=None):
-        """ setup on or several entries """
-
-        if guess is not None:
-            if len(guess) != self.nparam:
-                raise ValueError("'guess' must be a %d array "%self.nparam)
-            self._properties["guess"]  = guess
-
-        if guess_err is not None:
-            if len(init_err) != self.nparam:
-                raise ValueError("'guess_err' must be a %d array "%self.nparam)
-            self._properties["guess_err"]  = guess_err
-
-        if nwalkers is not None:
-            self.nwalkers  = int(nwalkers)
+    def run(self,**kwargs):
             
-        if nrun is not None:
-            self._properties["nrun"]  = nrun
+        """
+        **kwargs could be any `properties` entry:
+           nrun, nwalkers, guess, guess_err
+        """
+        try:
+            import emcee
+        except ImportError:
+            raise ImportError("Install emcee first => sudo pip install emcee")
+        
+        self.setup(**kwargs)
+        if not self.is_setup():
+            raise AttributeError("At least one of the following proprety has not been setup: nrun, nwalkers, guess, guess_err")
+    
+        # -- run the mcmc        
+        self._derived_properties["sampler"] = emcee.EnsembleSampler(self.nwalkers, self.nparam, self.lnprob)
+        _ = self.sampler.run_mcmc(self.poswalkers, self.nrun)
 
-        # ------------------
-        # - refresh
-        self.reset()
+    # ------------ #
+    # - SETTER   - #
+    # ------------ #
+    def setup(self, reset=True,**kwargs):
+        """ setup on or several entries. The derived parameters
+        have to be reset. Avoid that by setting reset to False"""
 
-    def reset(self):
-        """ clean the derived values """
-        self._derived_properties["poswalkers"] = None
+        for k,v in kwargs.items():
+            if k not in self.properties.keys():
+                raise ValueError("unknown property to setup %s"%k)
+            if k in ["guess","guess_err"] and len(v) !=self.nparam:
+                raise ValueError("'%s' must be a %d-value array (%d given)"%(k,self.nparam, len(v)))
+            self.properties[k] = v
+            
+        # -- you changed the mcmc, the former values are not correct anymore
+        if reset:
+            self.reset(reset_property=False)
         
     def set_burnin(self, value):
         """ set the burnin value above which the walkers are consistants.
         This is required to access the `samples`"""
         
-        if value<0 or burnin>self.nrun:
+        if value<0 or value>self.nrun:
             raise ValueError("the mcmc burnin must be greater than 0 and lower than the amount of run.")
-        
-        self.mcmc["burnin"] = burnin
+        self._properties["burnin"] = value
 
-    def run(self,nrun=None, nwalkers=None, init=None, init_err=None):
-        """ """
+    def reset(self, reset_property=True):
+        """ clean the derived values """
+        if reset_property:
+            self._properties["properties"]     = None
+            
+        self._properties["burnin"]             = None
+        self._derived_properties["poswalkers"] = None
+        self._derived_properties["sampler"]    = None
 
-        self.setup(nrun=nrun, nwalkers=nwalkers, guess=guess, guess_err=guess_err)
-        
-
-    
-        self._derived_properties["poswalkers"] = [self.posinit + np.random.randn(self.nparam)*init_err
-                                                  for i in range(self.mcmc["nwalkers"])]
-        # -- run the mcmc        
-        self.mcmc["sampler"] = emcee.EnsembleSampler(self.mcmc["nwalkers"], self.mcmc["ndim"], self.model.lnprob)
-        _ = self.mcmc["sampler"].run_mcmc(self.mcmc["pos"], self.mcmc["nrun"])
     # ========================= #
     #   Plot Methods            #
     # ========================= #
-    
-    def show_walkers(self):
-        """ """
-        pass
+    def show_walkers(self,savefile=None, show=True,
+                        cwalker=None, cline=None, truths=None, **kwargs):
+        """ Show the walker values for the mcmc run.
 
-    def show_corner(self):
-        """ """
-        pass
+        Parameters
+        ----------
+
+        savefile: [string]
+            where to save the figure. if None, the figure won't be saved
+
+        show: [bool]
+            If no figure saved, the function will show it except if this is set
+            to False
+
+        cwalker, cline: [matplotlib color]
+            Colors or the walkers and input values.
+        """
+        # -- This show the 
+        import matplotlib.pyplot as mpl
+        from astrobject.utils.mpladdon import figout
+        if not self.has_ran():
+            raise AttributeError("you must run mcmc first")
+        
+        fig = mpl.figure(figsize=[7,3*self.nparam])
+        # -- inputs
+        if cline is None:
+            cline = mpl.cm.Blues(0.4,0.8)
+        if cwalker is None:
+            cwalker = mpl.cm.binary(0.7,0.2)
+        
+        # -- ploting            
+        for i, name, fitted in zip(range(self.nparam), self.freeparameters, self.guess if truths is None else truths):
+            ax = fig.add_subplot(self.nparam,1,i+1, ylabel=name)
+            _ = ax.plot(np.arange(self.nrun), self.sampler.chain.T[i],
+                        color=cwalker,**kwargs)
+            
+            ax.axhline(fitted, color=cline, lw=2)
+
+        fig.figout(savefile=savefile, show=show)
+        
+
+    def show_corner(self, savefile=None, show=True,
+                         truths=None,**kwargs):
+        """ this matrix-corner plot showing the correlation between the
+        parameters.
+
+        Parameters
+        ----------
+        savefile: [string/None]
+            where to save the figure. If None, the plot won't be saved
+
+        show: [bool]
+            If the plot is not saved. It is shown except if this is False
+
+        truths: [array]
+            Show values as lines through the matrix-axes.
+            
+        **kwargs goes to corner.corner
+
+        Return
+        ------
+        Void
+        """
+        try:
+            import corner
+        except ImportError:
+            raise ImportError("install corner to be able to do this plot => sudo pip install corner.")
+        
+        from astrobject.utils.mpladdon import figout
+        
+        fig = corner.corner(self.samples, labels=self.freeparameters, 
+                        truths=self.guess if truths is None else truths,
+                        show_titles=True,label_kwargs={"fontsize":"xx-large"},**kwargs)
+
+        fig.figout(savefile=savefile, show=show)
+        
 
     # ========================= #
     #   Properties              #
@@ -105,27 +182,47 @@ class MCMC( BaseObject ):
     @property
     def freeparameters(self):
         """ """
-        self._properties["freeparameters"]
+        return self._properties["freeparameters"]
 
+    
     @property
     def nparam(self):
         """ number of free parameters """
         return len(self.freeparameters)
+
+    @property
+    def properties(self):
+        """ dictionary containing the parameters needed to setup the mcmc run"""
+        if self._properties["properties"] is None:
+            self._properties["properties"] = {}
+            for k in self.RUN_PROPERTIES :
+                self._properties["properties"][k] = None
+                
+        return self._properties["properties"]
+
+    def is_setup(self):
+        """ Check if you defined all the run properties """
+        for k in self.RUN_PROPERTIES:
+            if self.properties[k] is None:
+                return False
+        return True
     
     @property
     def lnprob(self):
         """ """
-        self._properties["lnprob"]
-    # -----------
-    # - MCMC prop
+        return self._properties["lnprob"]
+
+    # ------------------
+    # - MCMC properties
     @property
     def nrun(self):
         """ """
-        return self._properties["nrun"]
+        return self.properties["nrun"]
+    
     @property
     def nwalkers(self):
         """ """
-        self._properties["nwalkers"]
+        return self.properties["nwalkers"]
 
     @nwalkers.setter
     def nwalkers(self,value):
@@ -133,13 +230,78 @@ class MCMC( BaseObject ):
         if int(value)<2*self.nparam:
             raise ValueError("emcee request to have at least twice more walkers than parameters.")
         
-        self._properties["nwalkers"] = int(value)
+        self.properties["nwalkers"] = int(value)
+
+    @property
+    def poswalkers(self):
+        if self._derived_properties["poswalkers"] is None:
+            self._derived_properties["poswalkers"] = \
+              [self.guess + np.random.randn(self.nparam)*self.guess_err
+               for i in range(self.nwalkers)]
+            
+        return self._derived_properties["poswalkers"]
+            
+    @property
+    def guess(self):
+        """ """
+        return self.properties["guess"]
         
     @property
-    def posinit(self):
+    def guess_err(self):
         """ """
-        self._properties["posinit"]
+        return self.properties["guess_err"]
+
+    @property
+    def burnin(self):
+        return self._properties["burnin"]
+    # -------------------
+    # - Derived MCMC
+    @property
+    def sampler(self):
+        """ the emcee mcmc sampler """
+        return self._derived_properties["sampler"]
+    
+    def has_ran(self):
+        """ return True if you ran 'run_mcmc' """
+        return self.sampler is not None
+
+    @property
+    def samples(self):
+        """ the flatten samplers after burned in removal, see set_mcmc_samples """
+        if not self.has_ran():
+            raise AttributeError("run mcmc first.")
+        if self.burnin is None:
+            raise AttributeError("You did not specified the burnin value. see 'set_burnin")
         
+        return self.sampler.chain[:, self.burnin:, :].reshape((-1, self.nparam))
+
+    @property
+    def derived_values(self):
+        """ dictionary of the mcmc derived values with the structure:
+           NAME_OF_THE_PARAMETER = 50% pdf
+           NAME_OF_THE_PARAMETER.err = [+1sigma, -1sigma]
+        
+        """
+        values = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(self.samples, [16, 50, 84],axis=0)))
+        fitout = {}
+        for v,name in zip(values, self.freeparameters):
+            fitout[name] = v[0]
+            fitout[name+".err"] = [v[1],v[2]]
+            
+        return fitout
+
+    @property
+    def derived_bestparam(self):
+        """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
+        fit = self.derived_values
+        return [fit[name] for name in self.freeparameters]
+    
+    @property
+    def derived_bestparam_err(self):
+        """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
+        fit = self.derived_values
+        return [fit[name+".err"] for name in self.freeparameters]
+    
 # ========================================== #
 #                                            #
 #  Use the Scipy-Minuit Tricks               #
@@ -333,7 +495,7 @@ class BaseFitter( BaseObject ):
 
     # ------------------- #
     # - Bayes & MCMC    - #
-    # ------------------- # 
+    # ------------------- #
     def run_mcmc(self,nrun=2000, walkers_per_dof=3,
                  init=None,init_err=None):
         """ run mcmc from the emcee python code. This might take time
@@ -351,40 +513,24 @@ class BaseFitter( BaseObject ):
         -------
         Void (fill the self.mcmc property)
         """
-        try:
-            import emcee
-        except ImportError:
-            raise ImportError("Install emcee first => sudo pip install emcee")
+        self._derived_properties["mcmc"] = MCMC(self.model.lnprob, self.model.freeparameters)
         
-        # -- set up the mcmc
-        self.mcmc["ndim"], self.mcmc["nwalkers"] = \
-          self.model.nparam, int(self.model.nparam*walkers_per_dof)
-        self.mcmc["nrun"] = nrun
-        
-        # -- init the walkers
-        
-        init_err = np.asarray([self.fitvalues[name+".err"]
-                               for name in self.model.freeparameters]) if init_err is None \
-                               else np.asarray(init_err)
-            
-        self.mcmc["pos_init"] = np.asarray([self.fitvalues[name]
-                                            for name in self.model.freeparameters]) \
-                                            if init is None else np.asarray(init)
-        
-        self.mcmc["pos"] = [self.mcmc["pos_init"] + np.random.randn(self.mcmc["ndim"])*init_err
-                            for i in range(self.mcmc["nwalkers"])]
-        # -- run the mcmc        
-        self.mcmc["sampler"] = emcee.EnsembleSampler(self.mcmc["nwalkers"], self.mcmc["ndim"], self.model.lnprob)
-        _ = self.mcmc["sampler"].run_mcmc(self.mcmc["pos"], self.mcmc["nrun"])
+        guess = np.asarray([self.fitvalues[name] for name in self.model.freeparameters]) \
+                     if init is None else np.asarray(init)
+        guess_err =  np.asarray([self.fitvalues[name+".err"]
+                               for name in self.model.freeparameters]) \
+                    if init_err is None else np.asarray(init_err)
+                               
+        self.mcmc.setup(nrun=nrun,nwalkers = walkers_per_dof * self.model.nparam,
+                              guess=guess,guess_err = guess_err)
+
+        self.mcmc.run()
 
     def set_mcmc_burnin(self, burnin):
         """ set the burnin value above which the walkers are consistants.
         This is required to access the `samples`
         """
-        if burnin<0 or burnin>self.mcmc["nrun"]:
-            raise ValueError("the mcmc burnin must be greater than 0 and lower than the amount of run.")
-        
-        self.mcmc["burnin"] = burnin
+        self.mcmc.set_burnin(burnin)
 
 
     # ==================== #
@@ -412,17 +558,8 @@ class BaseFitter( BaseObject ):
         ------
         Void
         """
-        try:
-            import corner
-        except ImportError:
-            raise ImportError("install corner to be able to do this plot => sudo pip install corner.")
-        from astrobject.utils.mpladdon import figout
-        
-        fig = corner.corner(self.mcmc_samples, labels=self.model.freeparameters, 
-                        truths=self.mcmc["pos_init"] if truths is None else truths,
-                        show_titles=True,label_kwargs={"fontsize":"xx-large"},**kwargs)
-
-        fig.figout(savefile=savefile, show=show)
+        self.mcmc.show_corner(savefile=savefile, show=show,
+                            truths=truths,**kwargs)
         
     def show_mcmcwalkers(self, savefile=None, show=True,
                         cwalker=None, cline=None, truths=None, **kwargs):
@@ -441,28 +578,8 @@ class BaseFitter( BaseObject ):
         cwalker, cline: [matplotlib color]
             Colors or the walkers and input values.
         """
-        # -- This show the 
-        import matplotlib.pyplot as mpl
-        from astrobject.utils.mpladdon import figout
-        if not self.has_mcmc_ran():
-            raise AttributeError("you must run mcmc first")
-        
-        fig = mpl.figure(figsize=[7,3*self.mcmc["ndim"]])
-        # -- inputs
-        if cline is None:
-            cline = mpl.cm.Blues(0.4,0.8)
-        if cwalker is None:
-            cwalker = mpl.cm.binary(0.7,0.2)
-        
-        # -- ploting            
-        for i, name, fitted in zip(range(self.mcmc["ndim"]), self.model.freeparameters, self.mcmc["pos_init"] if truths is None else truths):
-            ax = fig.add_subplot(self.mcmc["ndim"],1,i+1, ylabel=name)
-            _ = ax.plot(np.arange(self.mcmc["nrun"]), self.mcmc["sampler"].chain.T[i],
-                        color=cwalker,**kwargs)
-            
-            ax.axhline(fitted, color=cline, lw=2)
-
-        fig.figout(savefile=savefile, show=show)    
+        self.mcmc.show_walkers(savefile=savefile, show=show,
+                        cwalker=cwalker, cline=cline, truths=truths, **kwargs)
     
 
 
@@ -543,20 +660,19 @@ class BaseFitter( BaseObject ):
     # - MCMC Stuffs  
     @property
     def mcmc(self):
-        """ dictionary containing the mcmc parameters """
-        if self._derived_properties["mcmc"] is None:
-            self._derived_properties["mcmc"] = {}
+        """ MCMC class containing the mcmc parameters """
         return self._derived_properties["mcmc"]
 
+    def has_mcmc(self):
+        """ return True if you ran 'run_mcmc' """
+        return self.mcmc is not None
+    
     @property
     def mcmc_samples(self):
         """ the flatten samplers after burned in removal, see set_mcmc_samples """
-        if not self.has_mcmc_ran():
+        if not self.has_mcmc():
             raise AttributeError("run mcmc first.")
-        if "burnin" not in self.mcmc.keys():
-            raise AttributeError("You did not specified the burnin value. see 'set_mcmc_burnin")
-        
-        return self.mcmc["sampler"].chain[:, self.mcmc["burnin"]:, :].reshape((-1, self.mcmc["ndim"]))
+        return self.mcmc.samples
 
     @property
     def mcmc_fitvalues(self):
@@ -565,27 +681,19 @@ class BaseFitter( BaseObject ):
            NAME_OF_THE_PARAMETER.err = [+1sigma, -1sigma]
         
         """
-        values = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(self.mcmc_samples, [16, 50, 84],axis=0)))
-        fitout = {}
-        for v,name in zip(values, self.model.freeparameters):
-            fitout[name] = v[0]
-            fitout[name+".err"] = [v[1],v[2]]
-            
-        return fitout
+        if not self.has_mcmc():
+            raise AttributeError("run mcmc first.")
+        return self.mcmc.derived_values
 
     @property
     def mcmc_bestparam(self):
         """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
-        fit = mcmc_fitvalues
-        return [fit[name] for name in self.model.freeparameters]
+        if not self.has_mcmc():
+            raise AttributeError("run mcmc first.")
+        return self.mcmc.derived_bestparam
     
-    def _set_mcmc_(self,mcmcdict):
-        """ Advanced methods to avoid rerunning an existing mcmc """
-        self._derived_properties["mcmc"] = mcmcdict
         
-    def has_mcmc_ran(self):
-        """ return True if you ran 'run_mcmc' """
-        return "sampler" in self.mcmc.keys()
+
 
 
     # -----------------
