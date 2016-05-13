@@ -15,6 +15,131 @@ except ImportError:
     warnings.warn("iminuit not accessible. You won't be able to use minuit functions", ImportError)
     _HASMINUIT = False
 
+
+class MCMC( BaseObject ):
+    """ Class Gathering the MCMC run output. based on emcee """
+    PROPERTIES         = ["lnprop","freeparameters",
+                         "nrun","nwalkers","burnin", "guess"]
+    SIDE_PROPERTIES    = ["posinit_err"]
+    DERIVED_PROPERTIES = ["poswalkers"]
+
+    # ========================= #
+    #   Initialization          #
+    # ========================= #
+    
+    def __init__(self, lnprob, freeparameters,
+                 guess=None,guess_err=None):
+        """ """
+        self._properties["lnprop"] = lnprob
+        self._properties["freeparameters"] = freeparameters
+        
+    # ========================= #
+    #   Main Methods            #
+    # ========================= #
+    def setup(self, nrun=None, nwalkers=None,
+              guess=None,guess_err=None):
+        """ setup on or several entries """
+
+        if guess is not None:
+            if len(guess) != self.nparam:
+                raise ValueError("'guess' must be a %d array "%self.nparam)
+            self._properties["guess"]  = guess
+
+        if guess_err is not None:
+            if len(init_err) != self.nparam:
+                raise ValueError("'guess_err' must be a %d array "%self.nparam)
+            self._properties["guess_err"]  = guess_err
+
+        if nwalkers is not None:
+            self.nwalkers  = int(nwalkers)
+            
+        if nrun is not None:
+            self._properties["nrun"]  = nrun
+
+        # ------------------
+        # - refresh
+        self.reset()
+
+    def reset(self):
+        """ clean the derived values """
+        self._derived_properties["poswalkers"] = None
+        
+    def set_burnin(self, value):
+        """ set the burnin value above which the walkers are consistants.
+        This is required to access the `samples`"""
+        
+        if value<0 or burnin>self.nrun:
+            raise ValueError("the mcmc burnin must be greater than 0 and lower than the amount of run.")
+        
+        self.mcmc["burnin"] = burnin
+
+    def run(self,nrun=None, nwalkers=None, init=None, init_err=None):
+        """ """
+
+        self.setup(nrun=nrun, nwalkers=nwalkers, guess=guess, guess_err=guess_err)
+        
+
+    
+        self._derived_properties["poswalkers"] = [self.posinit + np.random.randn(self.nparam)*init_err
+                                                  for i in range(self.mcmc["nwalkers"])]
+        # -- run the mcmc        
+        self.mcmc["sampler"] = emcee.EnsembleSampler(self.mcmc["nwalkers"], self.mcmc["ndim"], self.model.lnprob)
+        _ = self.mcmc["sampler"].run_mcmc(self.mcmc["pos"], self.mcmc["nrun"])
+    # ========================= #
+    #   Plot Methods            #
+    # ========================= #
+    
+    def show_walkers(self):
+        """ """
+        pass
+
+    def show_corner(self):
+        """ """
+        pass
+
+    # ========================= #
+    #   Properties              #
+    # ========================= #
+    # -----------
+    # MCMC base
+    @property
+    def freeparameters(self):
+        """ """
+        self._properties["freeparameters"]
+
+    @property
+    def nparam(self):
+        """ number of free parameters """
+        return len(self.freeparameters)
+    
+    @property
+    def lnprob(self):
+        """ """
+        self._properties["lnprob"]
+    # -----------
+    # - MCMC prop
+    @property
+    def nrun(self):
+        """ """
+        return self._properties["nrun"]
+    @property
+    def nwalkers(self):
+        """ """
+        self._properties["nwalkers"]
+
+    @nwalkers.setter
+    def nwalkers(self,value):
+        """ define the number of walker """
+        if int(value)<2*self.nparam:
+            raise ValueError("emcee request to have at least twice more walkers than parameters.")
+        
+        self._properties["nwalkers"] = int(value)
+        
+    @property
+    def posinit(self):
+        """ """
+        self._properties["posinit"]
+        
 # ========================================== #
 #                                            #
 #  Use the Scipy-Minuit Tricks               #
@@ -432,7 +557,28 @@ class BaseFitter( BaseObject ):
             raise AttributeError("You did not specified the burnin value. see 'set_mcmc_burnin")
         
         return self.mcmc["sampler"].chain[:, self.mcmc["burnin"]:, :].reshape((-1, self.mcmc["ndim"]))
+
+    @property
+    def mcmc_fitvalues(self):
+        """ dictionary of the mcmc derived values with the structure:
+           NAME_OF_THE_PARAMETER = 50% pdf
+           NAME_OF_THE_PARAMETER.err = [+1sigma, -1sigma]
         
+        """
+        values = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(self.mcmc_samples, [16, 50, 84],axis=0)))
+        fitout = {}
+        for v,name in zip(values, self.model.freeparameters):
+            fitout[name] = v[0]
+            fitout[name+".err"] = [v[1],v[2]]
+            
+        return fitout
+
+    @property
+    def mcmc_bestparam(self):
+        """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
+        fit = mcmc_fitvalues
+        return [fit[name] for name in self.model.freeparameters]
+    
     def _set_mcmc_(self,mcmcdict):
         """ Advanced methods to avoid rerunning an existing mcmc """
         self._derived_properties["mcmc"] = mcmcdict
