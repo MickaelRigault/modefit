@@ -87,13 +87,50 @@ def fit_spectrumlines(spectrum_file,zguess=None,modelName="HaNIICont",
     
     return lin
 
-
 # ========================== #
 # = Internal Functions     = #
 # ========================== #
-def get_lines_spectrum(x0,sigma,A,X,check_inputs=True,**kwargs):
-    """ combine emission lines into a multiple gaussian array
+def gaussian_lines(lbda,x0,sigma,amplitudes=None):
+    """ emission lines for the given lbda. (based on scipy's normal distribution)
 
+    Parameters:
+    -----------
+
+    lbda: [array]
+        (in Angstrom)
+        Wavelength  where the lines will be measured.
+
+    x0: [array-float]
+        (in Angstrom)
+        Location of the central emission lines
+
+    sigma: [array-float]
+       (in Angstrom)
+        width of the emission lines  
+
+    amplitudes: [array] -optional-
+        amplitude of the different lines
+        
+    Returns
+    -------
+    array (flux)
+    """
+    
+    gauss_array = stats.norm.pdf(np.asarray([lbda]*len(x0)).T,
+                                 loc=x0, scale=sigma)
+    
+    if amplitudes is not None:
+        return np.dot(gauss_array,amplitudes)
+    
+    return np.sum(gauss_array,axis=1)
+
+# -------------- #
+# - Erf ones   - #
+# -------------- #
+def erfgauss_lines(x0,sigma,A,X,check_inputs=True,**kwargs):
+    """ combine emission lines into a multiple gaussian array
+    (based on erf)
+    
     Parameters:
     -----------
     x0:    [float / float-array]
@@ -152,8 +189,8 @@ def get_lines_spectrum(x0,sigma,A,X,check_inputs=True,**kwargs):
     return np.sum([ A* line(x0,sigma,X,**kwargs)
                     for x0,sigma,A in zip(x0,sigma,A)],
                     axis=0)
-
-def line(x0,sigma,X,normalized=False,
+    
+def erfline(x0,sigma,X,normalized=False,
          velocity_step=False,sigma_x0unit=False):
     """ Get a gaussian emission line (based on erf)
 
@@ -211,16 +248,15 @@ def line(x0,sigma,X,normalized=False,
         norm_erf   = 1/stepreg
         sigma_pix  = sigmax0unit / stepreg
         
-    xborder = np.arange(npix+1) - 0.5
     # gaussian exposant
-    y = (xborder -pos) / sigma_pix
+    y = (np.arange(npix+1) - 0.5 - pos) / sigma_pix
     # analitics integration
     cumul = 0.5*(1+erf(y/np.sqrt(2)))
     # numerics derivation
     data = (np.roll(cumul,-1)[0:npix]-cumul[0:npix])*norm_erf
     
     # default : erf method is normalized
-    if normalized is False:
+    if not normalized:
         # remove normalisation
         norm = 1./(sigmax0unit*np.sqrt(2*np.pi))
         data /=norm
@@ -327,7 +363,6 @@ class LinesFitter( Spectrum, BaseFitter ):
         super(LinesFitter,self).set_lbda(x)
         self.model.set_lbda(x)
 
-        
     @_autogen_docstring_inheritance(Spectrum._load_lbda_,"Spectrum._load_lbda_")
     def _load_lbda_(self):
         #
@@ -780,8 +815,7 @@ class _OpticalLines_( Spectrum ):
                                         dispersion,**kwargs)
                                                                               
     # update and this are splited to allow easy inheritance.
-    def get_spectral_flux(self,ampl,velocity_km_s,dispersion,
-                          dispersion_inPixel=False):
+    def get_spectral_flux(self,ampl,velocity_km_s, dispersion_km_s):
         """ creates the spectral flux model
 
         Parameters
@@ -798,26 +832,26 @@ class _OpticalLines_( Spectrum ):
             This defines the shift of the wavelength (1 + velocity_km_s / clight)
             Negative values mean blue-shifted while positive values mean redshifted.
         
-        dispersion: [float]
-            (km/s or pixel if dispersion_inPixel is True)
+        dispersion_km_s: [float]
+            (in km/s)
             This width of the emission lines (sigma of the gaussian)
-                 
-        dispersion_inPixel: [bool]
-            = default is False =
-            Set to True if the dispersion is given in pixel rather than if km/s
-        
+                         
         Returns
         -------
         flux [array of the same size as self.lbda]
         """
-        return  get_lines_spectrum(self.linewave*(1. + velocity_km_s / CLIGHT),
-                                   [dispersion]*len(self.linewave),
-                                   self.read_amplitudes(ampl),
-                                   self.lbda,normalized=True,
-                                   sigma_x0unit = dispersion_inPixel,
-                                   velocity_step = self.has_velocity_step(),
-                                   check_inputs=False)
-    
+
+        # -- Location of the lines:
+        x0 = self.linewave*(1. + velocity_km_s / CLIGHT)
+        # -- dispersion
+        dispersion = dispersion_km_s/CLIGHT * x0
+        # -- amplitudes
+        amplitudes = self.read_amplitudes(ampl)
+        
+        return gaussian_lines(self.lbda,
+                              x0, dispersion,
+                              amplitudes)
+
     # ----------------
     # - Bayesian Touch
     def lnprior(self,parameters):
@@ -942,24 +976,6 @@ class OpticalLines_Basic( _OpticalLines_,BaseModel ):
 
         return np.asarray(ampl_)*global_ampl
 
-    
-    # -------------------- #
-    # - Allow Minuit Fit - #
-    # -------------------- #
-    def _minuit_chi2changed_(self,OII1,OII2,HN,HC,HE,HD,HG,HB,
-                       OIII,HA,NII,SII1,SII2,
-                       velocity,dispersion):
-        """ Stupid function such that minuit and scipy can be used similarly
-        (Give here all the parameter using the freeparameters order)
-        """
-        
-        parameter = np.asarray([OII1, OII2,
-                               HN, HC, HE, HD, HG, HB,
-                               OIII, HA, NII, SII1, SII2,
-                               velocity,dispersion])
-            
-        return self.get_chi2(parameter)
-
 # ------------------------------- #
 # --   Halpha NII  Model       -- #
 # ------------------------------- #
@@ -1008,20 +1024,6 @@ class OpticalLines_HaNII( _OpticalLines_,BaseModel  ):
 
         return np.asarray(ampl_)*global_ampl
         
-    # -------------------- #
-    # - Allow Minuit Fit - #
-    # -------------------- #
-    
-    def _minuit_chi2changed_(self,HA,NII,
-                       velocity,dispersion):
-        """ Stupid function such that minuit and scipy can be used similarly
-        (Give here all the parameter using the freeparameters order)
-        """
-        parameter = np.asarray([HA,NII,
-                    velocity,dispersion])
-            
-        return self.get_chi2(parameter)
-
 # ------------------------------- #
 # --   Halpha NII + Cont       -- #
 # ------------------------------- #
@@ -1052,19 +1054,6 @@ class OpticalLines_HaNIICont( OpticalLines_HaNII ):
         self.cont0,self.contSlope = parameters[2:-2]
         return parameters[:2],parameters[-2],parameters[-1]
     
-    # -------------------- #
-    # - Allow Minuit Fit - #
-    # -------------------- #
-    def _minuit_chi2changed_(self,HA,NII,cont0,contSlope,
-                       velocity,dispersion):
-        """ Stupid function such that minuit and scipy can be used similarly =
-        (Give here all the parameter using the freeparameters order)
-        """
-        parameter = np.asarray([HA,NII,cont0,contSlope,
-                               velocity,dispersion])
-            
-        return self.get_chi2(parameter)
-
 # ------------------------------- #
 # --  Halpha NII  Model Balmer -- #
 # ------------------------------- #
@@ -1173,7 +1162,6 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,BaseModel ):
                 
         self.extinctionFactor = Extinction.extinctionFactor
 
-
     # -------------------- #
     # -  Fit Tricks      - #
     # -------------------- #
@@ -1183,20 +1171,7 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,BaseModel ):
         """
         self.ebmv,self.Rv = parameters[2:-2]
         return parameters[:2],parameters[-2],parameters[-1]
-    
-    # -------------------- #
-    # - Allow Minuit Fit - #
-    # -------------------- #
-    def _minuit_chi2changed_(self,HA,NII,ebmv,Rv,
-                       velocity,dispersion):
-        """ Stupid function such that minuit and scipy can be used similarly =
-        (Give here all the parameter using the freeparameters order)
-        """
-        parameter = np.asarray([HA,NII,ebmv,Rv,
-                    velocity,dispersion])
         
-        return self.get_chi2(parameter)
-    
 # ------------------------------- #
 # --   Halpha NII  Model       -- #
 # ------------------------------- #
@@ -1256,18 +1231,4 @@ class OpticalLines_Mains( _OpticalLines_,BaseModel  ):
         ampl_[self._indexSII2]   = ampl[5]
 
         return np.asarray(ampl_)*global_ampl
-
-    # -------------------- #
-    # - Allow Minuit Fit - #
-    # -------------------- #
-    def _minuit_chi2changed_(self,HA,NII,OII1,OII2,SII1,SII2,
-                       velocity,dispersion):
-        """ Stupid function such that minuit and scipy can be used similarly =
-        (Give here all the parameter using the freeparameters order)
-        """
-        parameter = np.asarray([HA,NII,OII1,OII2,SII1,SII2,
-                    velocity,dispersion])
-            
-        return self.get_chi2(parameter)
-        
     

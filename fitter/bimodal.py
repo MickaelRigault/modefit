@@ -298,9 +298,7 @@ class StepFit( BimodalFit ):
                  proba=None,dx=None,
                  xcut=None,name=None,
                  use_minuit=None,**kwargs):
-        """
-        = This class is a child of *BimodalFit* that have the ability to
-          use an extra x-axis value to potentially define *proba* if needed
+        """ the ability to use an extra x-axis value to potentially define *proba* if needed
           and to show a *x,data* plot taking into account this probability.
           See further details in ProbaFit_library.BimodalFit
         =
