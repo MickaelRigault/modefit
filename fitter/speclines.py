@@ -91,21 +91,21 @@ def fit_spectrumlines(spectrum_file,zguess=None,modelName="HaNIICont",
 # ========================== #
 # = Internal Functions     = #
 # ========================== #
-def get_lines_spectrum(x0_s,sigma_s,A_s,X,**kwargs):
+def get_lines_spectrum(x0,sigma,A,X,check_inputs=True,**kwargs):
     """ combine emission lines into a multiple gaussian array
 
     Parameters:
     -----------
-    x0_s:    [float / float-array]
+    x0:    [float / float-array]
          = In Angstrom =
          Location of the central values of the emission line
          
-    sigma_s  [float/ float-array]
+    sigma  [float/ float-array]
          = In velocity (km/s) [or Angstrom if sigma_x0unit=True] =
          This is the width of the lines
          (could be a 1D array/float is all line share the same width)
 
-    A_s  [float/ float-array]
+    A  [float/ float-array]
          = Flux - unit =
          This is the Amplitude of the lines
          (could be a 1D array/float is all line share the same Amplitude)
@@ -114,36 +114,43 @@ def get_lines_spectrum(x0_s,sigma_s,A_s,X,**kwargs):
         = In Angstrom =
         Define the wavelength used to estimate the lines' pdf
 
+    check_inputs: [bool] -optional-
+        CAREFUL - set this to False enables to skip all the input tests
+        use this if you know what you are doing in order to save time.
+        
     **kwargs goes to `lines`. See this function options (e.g., velocity_step )
     
     Returns
     -------
     array (same size as X)
     """
-    def make_me_iterable(a):
-        return a if "__iter__" in dir(a) else [a]
-    
-    x0s,sigmas,As = make_me_iterable(x0_s),make_me_iterable(sigma_s),\
-      make_me_iterable(A_s)
     # ====================== #
     #  INPUT TEST            #
     # ====================== #
-    # -- Is Sigma Input Ok ?
-    if len(sigmas) == 1:
-        sigmas = sigmas*len(x0s)
-    elif len(sigmas) != len(x0s):
-        raise ValueError("sigma_s and x0_s must have the same lengths except if sigma_s is a unique value")
-    # -- Is Amplitude Input Ok ?
-    if len(As) == 1:
-        As = As[0]*len(x0s)
-    elif len(As) != len(x0s):
-        raise ValueError("A_s and x0_s must have the same lengths except if A_s is a unique value")
+    if check_inputs:
+        def make_me_iterable(a):
+            return a if "__iter__" in dir(a) else [a]
+        
+        x0, sigma, A = \
+          make_me_iterable(x0),make_me_iterable(sigma),make_me_iterable(A)
+
+        # -- Is Sigma Input Ok ?
+        if len(sigma) == 1:
+            sigma = sigma*len(x0)
+        elif len(sigma) != len(x0):
+            raise ValueError("sigma and x0 must have the same lengths except if sigma is a unique value (%d vs. %d)"%(len(sigma),len(x0)))
+        # -- Is Amplitude Input Ok ?
+        if len(A) == 1:
+            A = A[0]*len(x0)
+        elif len(A) != len(x0):
+            raise ValueError("A and x0 must have the same lengths except if A is a unique value (%d vs. %d)"%(len(A),len(x0)))
+
     # ====================== #
     #  The Spectra           #
     # ====================== #
     # -- Things looks great, let's build the spectrum
     return np.sum([ A* line(x0,sigma,X,**kwargs)
-                    for x0,sigma,A in zip(x0s,sigmas,As)],
+                    for x0,sigma,A in zip(x0,sigma,A)],
                     axis=0)
 
 def line(x0,sigma,X,normalized=False,
@@ -180,29 +187,26 @@ def line(x0,sigma,X,normalized=False,
     array (same size as X)    
     """
     
-    lamrangelog = np.log(X)
-    start = lamrangelog.min()
-    end   = lamrangelog.max()
-    npix  = len(lamrangelog)# npix same if log or not
-    step  = (end-start)/(npix-1) 
-    
-    ## regular size
-    startreg = X.min()
-    endreg = X.max()
-    stepreg = (endreg -startreg )/(npix-1)
-    
     # dispersion in pixel space and relativ position
-    if sigma_x0unit == True:
-        sigmax0unit = sigma
-    else:
-        sigmax0unit = sigma/CLIGHT * x0
+    npix        = len(X)# npix same if log or not
+    sigmax0unit = sigma if sigma_x0unit else sigma/CLIGHT * x0
     
     # stepreg --> x0*step
     if velocity_step is True:
+        lamrangelog = np.log(X)
+        start = lamrangelog.min()
+        end   = lamrangelog.max()
+        
+        step  = (end-start)/(npix-1)
         pos = (np.log(x0) - start) / step # take it in pixel 
         norm_erf   = 1/(x0*step)
         sigma_pix  = sigmax0unit / (x0*step)    
     else:
+        ## regular size
+        startreg = X.min()
+        endreg   = X.max()
+        stepreg  = (endreg -startreg )/(npix-1)
+    
         pos = (x0 - startreg) / stepreg # take it in pixel 
         norm_erf   = 1/stepreg
         sigma_pix  = sigmax0unit / stepreg
@@ -213,8 +217,7 @@ def line(x0,sigma,X,normalized=False,
     # analitics integration
     cumul = 0.5*(1+erf(y/np.sqrt(2)))
     # numerics derivation
-    data = (np.roll(cumul,-1)[0:npix]-cumul[0:npix])
-    data *= norm_erf
+    data = (np.roll(cumul,-1)[0:npix]-cumul[0:npix])*norm_erf
     
     # default : erf method is normalized
     if normalized is False:
@@ -268,7 +271,7 @@ def lnprior_dispersion_flat(dispersion, dispersion_bounds):
         return -np.inf
     return 0
 
-def lnprior_dispersion(dispersion, loc=170, scale=20):
+def lnprior_dispersion(dispersion, loc=170, scale=15):
     """ Gaussian prior estimated from the good line measurement
     made based on flat priors.
     """
@@ -383,6 +386,9 @@ class LinesFitter( Spectrum, BaseFitter ):
         #
         # Add Normalisation information
         #
+        # - Update the model 
+        self.model.update(*self.model.parse_parameters(self._fitparams))
+        #
         super(LinesFitter,self)._fit_readout_()
         self.dof       = len(self.model.y[self.model.lbda_mask])-self.model.nparam + \
           len(np.argwhere(np.asarray(self.paramfixed,dtype='bool')))
@@ -400,12 +406,9 @@ class LinesFitter( Spectrum, BaseFitter ):
         """
         **kwargs goes to updateModel
         """
-        
-        self.model.update(*self.model.parse_parameters(parameters),
-                          **kwargs)
-        
-        return self.yfit - self.model.y
+        return self.yfit - self.model.get_model(parameters,**kwargs)
 
+    
     def get_modelchi2(self,parameters,**kwargs):
         """ chi2 model that has to be given to the model
 
@@ -442,6 +445,57 @@ class LinesFitter( Spectrum, BaseFitter ):
     # =============================== #
     # =  Spectrum Adaptation        = #
     # =============================== #
+    def show_mcmcfit(self, nsamples = 100,
+                     savefile=None, show=True,
+                     variance_onzero=False,ax=None):
+        """ Some typical mcmc examples overplotting the data
+
+        Parameters
+        ----------
+
+        savefile: [string] -optional-
+            where to save the plot if you wish so (set None if not)
+
+        show: [bool] -optional-
+
+        Returns
+        -------
+        dictionnary (plot output)
+        """
+        
+        if not self.has_mcmc() or not self.mcmc.has_run():
+            raise AttributeError("Run MCMC first.")
+
+        if nsamples> self.mcmc.nsamples:
+            raise ValueError("More samples requested than mcmc samples (%d vs. %d)"%(nsamples,self.mcmc.nsamples))
+        
+        # --------------
+        # - Plot init
+        # --------------
+        import matplotlib.pyplot as mpl 
+        from astrobject.utils.mpladdon import specplot,figout
+        self._plot = {}
+        if ax is None:
+            fig = mpl.figure(figsize=[8,5])
+            ax = fig.add_axes([0.1,0.1,0.8,0.8])
+        elif "plot" not in dir(ax):
+            raise TypeError("The given 'ax' most likely is not a matplotlib axes. ")
+        else:
+            fig = ax.figure
+
+        # -----------
+        # - Data
+        # -----------
+        pl = ax.specplot(self.lbda,self.yfit,self.vfit,
+                         color="0.4",err_onzero=variance_onzero)
+        # ----------------
+        # - MCMC examples
+        # ----------------
+        #self.mcmc.samples[np.random.randint(self.mcmc.nsamples, size=nsamples)]
+        #[ax.specplot(self.lbda,self.yfit,self.vfit,
+        #                 color="0.4",err_onzero=variance_onzero)
+        
+        
     def show(self,savefile=None,show=True,
              variance_onzero=False,ax=None,
              modelprop={},add_thumbnails=False,
@@ -471,7 +525,6 @@ class LinesFitter( Spectrum, BaseFitter ):
         pl = ax.specplot(self.lbda,self.yfit,self.vfit,
                          color="0.4",err_onzero=variance_onzero)
 
-            
         plmodel = ax.plot(self.model.lbda,self.model.y,"r-", alpha=0.2)
         # -- Actual Fit
         xfit = self.model.lbda.copy()
@@ -668,6 +721,22 @@ class _OpticalLines_( Spectrum ):
     # ========================= #
     # = Main Methods          = #  
     # ========================= #
+    def get_model(self,parameters,**kwargs):
+        """ return the flux of the modeled spectrum
+
+        Parameters:
+        -----------
+        parameter: [array]
+            array parsable by parse_parameters() for get_spectral_flux()
+
+        Return
+        ------
+        array (flux to be compared to the data)
+        """
+        
+        return self.get_spectral_flux(*self.parse_parameters(parameters),
+                                      **kwargs)
+    
     def parse_parameters(self,parameters):
         """ Generique function that works only if the model is made
         of emission line amplitudes and velocity+dispersion.
@@ -709,7 +778,7 @@ class _OpticalLines_( Spectrum ):
         """
         self.y =  self.get_spectral_flux(ampl,velocity_km_s,
                                         dispersion,**kwargs)
-        
+                                                                              
     # update and this are splited to allow easy inheritance.
     def get_spectral_flux(self,ampl,velocity_km_s,dispersion,
                           dispersion_inPixel=False):
@@ -742,11 +811,12 @@ class _OpticalLines_( Spectrum ):
         flux [array of the same size as self.lbda]
         """
         return  get_lines_spectrum(self.linewave*(1. + velocity_km_s / CLIGHT),
-                                   dispersion,
+                                   [dispersion]*len(self.linewave),
                                    self.read_amplitudes(ampl),
                                    self.lbda,normalized=True,
                                    sigma_x0unit = dispersion_inPixel,
-                                   velocity_step = self.has_velocity_step())
+                                   velocity_step = self.has_velocity_step(),
+                                   check_inputs=False)
     
     # ----------------
     # - Bayesian Touch
@@ -876,7 +946,7 @@ class OpticalLines_Basic( _OpticalLines_,BaseModel ):
     # -------------------- #
     # - Allow Minuit Fit - #
     # -------------------- #
-    def _minuit_chi2_(self,OII1,OII2,HN,HC,HE,HD,HG,HB,
+    def _minuit_chi2changed_(self,OII1,OII2,HN,HC,HE,HD,HG,HB,
                        OIII,HA,NII,SII1,SII2,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly
@@ -941,7 +1011,8 @@ class OpticalLines_HaNII( _OpticalLines_,BaseModel  ):
     # -------------------- #
     # - Allow Minuit Fit - #
     # -------------------- #
-    def _minuit_chi2_(self,HA,NII,
+    
+    def _minuit_chi2changed_(self,HA,NII,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly
         (Give here all the parameter using the freeparameters order)
@@ -984,7 +1055,7 @@ class OpticalLines_HaNIICont( OpticalLines_HaNII ):
     # -------------------- #
     # - Allow Minuit Fit - #
     # -------------------- #
-    def _minuit_chi2_(self,HA,NII,cont0,contSlope,
+    def _minuit_chi2changed_(self,HA,NII,cont0,contSlope,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly =
         (Give here all the parameter using the freeparameters order)
@@ -1116,7 +1187,7 @@ class OpticalLines_BalmerSerie(  _OpticalLines_,BaseModel ):
     # -------------------- #
     # - Allow Minuit Fit - #
     # -------------------- #
-    def _minuit_chi2_(self,HA,NII,ebmv,Rv,
+    def _minuit_chi2changed_(self,HA,NII,ebmv,Rv,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly =
         (Give here all the parameter using the freeparameters order)
@@ -1189,7 +1260,7 @@ class OpticalLines_Mains( _OpticalLines_,BaseModel  ):
     # -------------------- #
     # - Allow Minuit Fit - #
     # -------------------- #
-    def _minuit_chi2_(self,HA,NII,OII1,OII2,SII1,SII2,
+    def _minuit_chi2changed_(self,HA,NII,OII1,OII2,SII1,SII2,
                        velocity,dispersion):
         """ Stupid function such that minuit and scipy can be used similarly =
         (Give here all the parameter using the freeparameters order)

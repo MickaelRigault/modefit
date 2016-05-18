@@ -177,84 +177,24 @@ class BimodalFit( BaseFitter ):
         
 
     def get_modelchi2(self,parameters):
-        """
-        = Parses the parameters and return the associated -2 log Likelihood
-          Both the parser and the log Likelohood functions belongs to the
-          model.
-          This should usually be passed to the model with loading it.
-          (See set_model)
-        =
+        """ get the associated -2 log Likelihood
+
+        This should usually be passed to the model with loading it.
+        (See set_model)
         
-        parameters: [array]        a list of parameter as they could be understood
-                                   by self.model.setup to setup the current model.
+        Parameters
+        ----------
+        
+        parameters: [array]
+            a list of parameter as they could be understood
+            by self.model.setup to setup the current model.
                                    
-        = RETURNS =
-        float (-2*log(likelihood) for *data*, *errors* and *proba* and the given model)
-        
+        Return
+        -------
+        float (-2*log(likelihood))
         """
         self.model.setup(parameters)
         return -2 * self.model.get_loglikelihood(self.data,self.errors,self.proba)
-
-    
-    # ========================= #
-    # = Ploting Tools         = #
-    # ========================= #
-    def _load_plot_(self):
-        """
-        = Internal function loading a *PlotStep* object in self.plot =
-        """
-        raise NotImplementedErrors("To Be Done")
-        if "plot" not in dir(self):
-            self.plot = PlotStep(self)
-    
-    
-    def show(self,savefile=None,
-             catch_names=True,axes=None,
-             **kwargs):
-        """
-        = Visuallisation of the *data* and the models.
-          This function makes use of the PlotStep class.
-        =
-
-        savefile: [string/None]     If you wish to save the plot in the given
-                                    filename (*without extention*). This will create
-                                    a `savefile`.pdf and `savefile`.png
-                                    The plot won't be show if it is saved.
-
-        catch_names: [bool]         If the object have names, you will be able to pick
-                                    on the plot the marker to know which corresponds
-                                    to what.
-                                    This does not work if the plot is saved instead
-                                    of shown or if self.names is not defined.
-
-        axes: [3-array axes/None]   Give matplotlib axes in which the plot will be
-                                    drawn 3 axes must be given (axsc, axhistx, axhisty)
-                                    The latest 2 (both or only one) could be set to
-                                    None if you do not wish to have the corresponding
-                                    histogram plotted.
-
-        **kwargs                    goes to PlotStep.show_key (via self.plot)
-        
-        """
-        self._load_plot_()
-        self.plot.show_key("proba",axes=axes,**kwargs)
-        
-        # -- Mean best fit results
-        if "fitout" in dir(self):
-            self.plot.fline = pt.FancyLine()
-            
-            self.plot.fline.hline(self.plot.ax,self.fitout["a"]['mean'],
-                                rangex=[0,1],lws=[0,1],alphas=[0,1],colors=[0,1],
-                                cmap=pt.P.cm.binary)
-            
-            self.plot.fline.hline(self.plot.ax,self.fitout["b"]['mean'],
-                                rangex=[0,1],lws=[1,0],alphas=[1,0],colors=[1,0],
-                                cmap=pt.P.cm.Blues)
-            
-        # -- the output
-        self.plot.savefilereader(savefile)
-
-
 
     # ====================== #
     # Properties             #
@@ -291,19 +231,19 @@ class BimodalFit( BaseFitter ):
         return len(self.data)
         
 # ========================== #
-# ========================== #
-# ==  The Model           == #
-# ========================== #
+#                            #
+#     The Model              #
+#                            #
 # ========================== #
 class ModelBinormal( BaseModel ):
-    """
-    """
+    """ Model for a Bi Normal Distribution (2 Gaussians) """
+    
     FREEPARAMETERS = ["mean_a","sigma_a",
                       "mean_b","sigma_b"]
-        
+    # -------------------
+    # - Initial Guesses    
     sigma_a_guess = 0
     sigma_a_fixed = False
-    # sigma_a_limit = [None,None]
     
     sigma_b_guess = 0
     sigma_b_fixed = False
@@ -316,18 +256,15 @@ class ModelBinormal( BaseModel ):
     # - LikeLiHood and Chi2 - #
     # ----------------------- #
     def get_loglikelihood(self,x,dx,p):
-        """
-        """
-        return np.sum([ np.log(self._get_case_likelihood_(x_,y_,p_))
-                       for x_,y_,p_ in zip(x,dx,p)] )
-    
-    def _get_case_likelihood_(self,x,dx,p):
-        """
-        """
+        """ Measure the likelihood to find the data given the model's parameters """
+        Li = p * stats.norm.pdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)) + \
+               (1-p) * stats.norm.pdf(x,loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2))
         
-        return p * stats.norm(loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)).pdf(x) + \
-           (1-p) * stats.norm(loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2)).pdf(x)
-
+        return np.sum(np.log(Li))
+    
+    def get_case_likelihood(self,xi,dxi,pi):
+        """ return the log likelihood of the given case. See get_loglikelihood """
+        return self.get_loglikelihood([xi],[dxi],[pi])
 
     # ----------------------- #
     # - Bayesian methods    - #

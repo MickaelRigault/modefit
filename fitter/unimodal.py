@@ -176,16 +176,18 @@ class ModelNormal( BaseModel ):
     # ----------------------- #
     # - LikeLiHood and Chi2 - #
     # ----------------------- #
-    def get_loglikelihood(self,x,dx):
-        """
-        """
-        return np.sum([ np.log(self._get_case_likelihood_(x_,y_))
-                       for x_,y_ in zip(x,dx)] )
+    # ----------------------- #
+    # - LikeLiHood and Chi2 - #
+    # ----------------------- #
+    def get_loglikelihood(self,x,dx,p):
+        """ Measure the likelihood to find the data given the model's parameters """
+        Li = stats.norm.pdf(x,loc=self.mean,scale=np.sqrt(self.sigma**2 + dx**2))
+        
+        return np.sum(np.log(Li))
     
-    def _get_case_likelihood_(self,x,dx):
-        """
-        """
-        return stats.norm(loc=self.mean,scale=np.sqrt(self.sigma**2 + dx**2)).pdf(x)
+    def get_case_likelihood(self,xi,dxi,pi):
+        """ return the log likelihood of the given case. See get_loglikelihood """
+        return self.get_loglikelihood([xi],[dxi],[pi])
 
 
     # ----------------------- #

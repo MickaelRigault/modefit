@@ -7,6 +7,7 @@ import numpy as np
 import warnings
 
 from astrobject import BaseObject
+from astrobject.utils.decorators import make_method
 
 try:
     from iminuit import Minuit
@@ -15,15 +16,17 @@ except ImportError:
     warnings.warn("iminuit not accessible. You won't be able to use minuit functions", ImportError)
     _HASMINUIT = False
 
+    
 
 class MCMC( BaseObject ):
-    """ Class Gathering the MCMC run output. based on emcee """
+    """ Class Gathering the MCMC run output. Based on emcee """
     
     # BaseObject global variables
     PROPERTIES         = ["lnprob","freeparameters","runprop",
                           "burnin","properties"]
     SIDE_PROPERTIES    = []
     DERIVED_PROPERTIES = ["sampler","poswalkers"]
+    
     # MCMC global variables
     RUN_PROPERTIES = ["guess","guess_err","nrun","nwalkers"]
     
@@ -33,7 +36,29 @@ class MCMC( BaseObject ):
     
     def __init__(self, lnprob, freeparameters,
                  guess=None,guess_err=None):
-        """ """
+        """ The mcmc object
+
+        Parameters
+        ----------
+        lnprob: [function]
+            function that must returns the log of log_prior + log_likelihood
+            it should take parameters as input.
+
+        freeparameters: [string-array]
+            name of parameters of the models.
+            (same size and sorting as the parameters entering lnprob()
+
+        guess: [float-array] -optional-
+            initial position for the mcmc-walkers
+
+        guess_err: [float-array] -optional-
+            typical error range for the initial guess. The walkers will be
+            initialized around 'guess' +/- 'guess_err'
+
+        Return
+        ------
+        Loads the instance.
+        """
         self._properties["lnprob"] = lnprob
         self._properties["freeparameters"] = freeparameters
         
@@ -42,9 +67,17 @@ class MCMC( BaseObject ):
     # ========================= #
     def run(self,**kwargs):
             
-        """
+        """ run the mcmc. This method could take time
+        (running method based on emcee)
+        
         **kwargs could be any `properties` entry:
            nrun, nwalkers, guess, guess_err
+
+        The entry will change the way the mcmc will be performed
+
+        Returns
+        -------
+        Void
         """
         try:
             import emcee
@@ -63,8 +96,12 @@ class MCMC( BaseObject ):
     # - SETTER   - #
     # ------------ #
     def setup(self, reset=True,**kwargs):
-        """ setup on or several entries. The derived parameters
-        have to be reset. Avoid that by setting reset to False"""
+        """ setup one or several entries.
+        The derived parameters (sampler, samples) will be reset except
+        if reset is set to False
+
+        **kwargs could be any of the RUN_PROPERTIES (nrun, nwalkers, guess, guess_err)
+        """
 
         for k,v in kwargs.items():
             if k not in self.properties.keys():
@@ -78,8 +115,9 @@ class MCMC( BaseObject ):
             self.reset(reset_property=False)
         
     def set_burnin(self, value):
-        """ set the burnin value above which the walkers are consistants.
-        This is required to access the `samples`"""
+        """ defines the burnin value above which the walkers
+        are consistants. This is required to access the `samples`
+        """
         
         if value<0 or value>self.nrun:
             raise ValueError("the mcmc burnin must be greater than 0 and lower than the amount of run.")
@@ -137,7 +175,6 @@ class MCMC( BaseObject ):
 
         fig.figout(savefile=savefile, show=show)
         
-
     def show_corner(self, savefile=None, show=True,
                          truths=None,**kwargs):
         """ this matrix-corner plot showing the correlation between the
@@ -173,7 +210,6 @@ class MCMC( BaseObject ):
 
         fig.figout(savefile=savefile, show=show)
         
-
     # ========================= #
     #   Properties              #
     # ========================= #
@@ -181,13 +217,12 @@ class MCMC( BaseObject ):
     # MCMC base
     @property
     def freeparameters(self):
-        """ """
+        """ names of the parameters of the model (see lnprob) """
         return self._properties["freeparameters"]
-
     
     @property
     def nparam(self):
-        """ number of free parameters """
+        """ number of parameters """
         return len(self.freeparameters)
 
     @property
@@ -209,19 +244,21 @@ class MCMC( BaseObject ):
     
     @property
     def lnprob(self):
-        """ """
+        """ functon returning the log_prior + log_likelihood in the
+        Bayesian framework."""
         return self._properties["lnprob"]
 
     # ------------------
     # - MCMC properties
     @property
     def nrun(self):
-        """ """
+        """ number of run for the mcmc"""
         return self.properties["nrun"]
     
     @property
     def nwalkers(self):
-        """ """
+        """ number of walkers used to scan the parameter space
+        This must be at least twice the number of parameters."""
         return self.properties["nwalkers"]
 
     @nwalkers.setter
@@ -234,6 +271,7 @@ class MCMC( BaseObject ):
 
     @property
     def poswalkers(self):
+        """ Initial position given to the walkers """
         if self._derived_properties["poswalkers"] is None:
             self._derived_properties["poswalkers"] = \
               [self.guess + np.random.randn(self.nparam)*self.guess_err
@@ -243,24 +281,27 @@ class MCMC( BaseObject ):
             
     @property
     def guess(self):
-        """ """
+        """ Initial central values for to set the walkers """
         return self.properties["guess"]
         
     @property
     def guess_err(self):
-        """ """
+        """ Initial errors around the central values
+        for to set the walkers"""
         return self.properties["guess_err"]
 
     @property
     def burnin(self):
+        """ Number of walk below which the walker did not converged. """
         return self._properties["burnin"]
-    # -------------------
-    # - Derived MCMC
+    
+    # --------------------
+    # - Derived Properties
     @property
     def sampler(self):
         """ the emcee mcmc sampler """
         return self._derived_properties["sampler"]
-    
+
     def has_ran(self):
         """ return True if you ran 'run_mcmc' """
         return self.sampler is not None
@@ -276,11 +317,16 @@ class MCMC( BaseObject ):
         return self.sampler.chain[:, self.burnin:, :].reshape((-1, self.nparam))
 
     @property
+    def nsamples(self):
+        """ number of samples avialable (burnin removed) """
+        return len(self.samples)
+
+            
+    @property
     def derived_values(self):
         """ dictionary of the mcmc derived values with the structure:
            NAME_OF_THE_PARAMETER = 50% pdf
            NAME_OF_THE_PARAMETER.err = [+1sigma, -1sigma]
-        
         """
         values = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(self.samples, [16, 50, 84],axis=0)))
         fitout = {}
@@ -313,7 +359,6 @@ class BaseFitter( BaseObject ):
     PROPERTIES         = ["param_input","model","use_minuit"]
     SIDE_PROPERTIES    = []
     DERIVED_PROPERTIES = ["fitvalues","mcmc"]
-
     
     # ========================= #
     # = Initialization        = #  
@@ -408,9 +453,8 @@ class BaseFitter( BaseObject ):
         if not self.has_fit_run():
             raise AttributeError("You should fit first !")
         
-        if self.use_minuit:
-            return self.minuit.fval
-        return self.scipy_output['fun']
+        return self.minuit.fval if self.use_minuit else \
+            self.scipy_output['fun']
 
     def converged_on_boundaries(self):
         """Check if any parameter have converged on any boundary of the model"""
@@ -429,6 +473,8 @@ class BaseFitter( BaseObject ):
         return False
 
     def is_fit_good(self):
+        """ Test if the fit went well (fitOk good) and if
+        no fitted values converged on the boundaries """
         return self.fitOk and not self.converged_on_boundaries()
         
         
@@ -466,7 +512,7 @@ class BaseFitter( BaseObject ):
 
         # -- In there, all the model already has
         if not self.is_input_set():
-            self._properties['param_input'] = self.model.get_set_param_input()
+            self._properties['param_input'] = self.model.get_param_input()
         
         # -- Then, whatever you gave
         for k,v in kwargs.items():
@@ -490,9 +536,7 @@ class BaseFitter( BaseObject ):
                 self.param_input[name+"_boundaries"] = [None,None]
             # -- and give it to the model
         self.model.set_param_input(self.param_input)
-            #for v in ["_guess","_fixed","_boundaries"]:
-            #    self.model.__dict__[name+v] = self.param_input[name+v]
-
+          
     # ------------------- #
     # - Bayes & MCMC    - #
     # ------------------- #
@@ -513,17 +557,23 @@ class BaseFitter( BaseObject ):
         -------
         Void (fill the self.mcmc property)
         """
+        # -------------
+        # - Load MCMC
         self._derived_properties["mcmc"] = MCMC(self.model.lnprob, self.model.freeparameters)
         
-        guess = np.asarray([self.fitvalues[name] for name in self.model.freeparameters]) \
-                     if init is None else np.asarray(init)
-        guess_err =  np.asarray([self.fitvalues[name+".err"]
-                               for name in self.model.freeparameters]) \
-                    if init_err is None else np.asarray(init_err)
-                               
-        self.mcmc.setup(nrun=nrun,nwalkers = walkers_per_dof * self.model.nparam,
-                              guess=guess,guess_err = guess_err)
-
+        # -------------
+        # - Set it up
+        guess     = np.asarray([self.fitvalues[name] for name in self.model.freeparameters]) \
+                                if init is None else np.asarray(init)
+        guess_err = np.asarray([self.fitvalues[name+".err"]
+                                for name in self.model.freeparameters]) \
+                                if init_err is None else np.asarray(init_err)
+        self.mcmc.setup(nrun      = nrun,
+                        nwalkers  = walkers_per_dof * self.model.nparam,
+                        guess     = guess,
+                        guess_err = guess_err)
+        # -------------
+        # - And run it
         self.mcmc.run()
 
     def set_mcmc_burnin(self, burnin):
@@ -531,7 +581,6 @@ class BaseFitter( BaseObject ):
         This is required to access the `samples`
         """
         self.mcmc.set_burnin(burnin)
-
 
     # ==================== #
     # = Ploting Methods  = #
@@ -581,9 +630,6 @@ class BaseFitter( BaseObject ):
         self.mcmc.show_walkers(savefile=savefile, show=show,
                         cwalker=cwalker, cline=cline, truths=truths, **kwargs)
     
-
-
-        
     # ====================== #
     # = Properties         = #
     # ====================== #
@@ -623,13 +669,13 @@ class BaseFitter( BaseObject ):
         self._properties["use_minuit"] = bool(use_minuit_bool)
         
     # -----------------------
-    # - Parameters Values
+    # Guess / Boundaries etc
+    # -----------------------
     @property
     def param_input(self):
         """ dictionnary containing the input parameter values:
            guess / fixed / bounds
-
-        See also the respective class properties
+        (See also the associated properties)
         """
         if self._properties["param_input"] is None:
             self._properties["param_input"] = {}
@@ -692,10 +738,6 @@ class BaseFitter( BaseObject ):
             raise AttributeError("run mcmc first.")
         return self.mcmc.derived_bestparam
     
-        
-
-
-
     # -----------------
     # - derived
     @property
@@ -734,7 +776,8 @@ class BaseFitter( BaseObject ):
         self.fitvalues["chi2"]    = self.get_fval()
 
     # --------------
-    # - Minuit          
+    #  Minuit
+    # --------------    
     def _fit_minuit_(self,verbose=True):
         """
         """
@@ -751,8 +794,6 @@ class BaseFitter( BaseObject ):
         self._fitparams = np.asarray([self.minuit.values[k]
                               for k in self.model.freeparameters])
         
-        
-        
     def _setup_minuit_(self):
         """
         """
@@ -765,13 +806,13 @@ class BaseFitter( BaseObject ):
             minuit_kwargs[param]           = self.param_input["%s_guess"%param]
             minuit_kwargs["limit_"+param]  = self.param_input["%s_boundaries"%param]
             minuit_kwargs["fix_"+param]    = self.param_input["%s_fixed"%param]
-            
+
         self.minuit = Minuit(self.model._minuit_chi2_,
                              print_level=1,errordef=1,
                              **minuit_kwargs)
-
     # ----------------
-    # - Scipy              
+    #  Scipy
+    # ----------------
     def _fit_scipy_(self):
         """ fit using scipy """
         
@@ -793,22 +834,48 @@ class BaseFitter( BaseObject ):
 # = Play with Scipy and Minuit Similarly   = #
 #                                            #
 # ========================================== #
-
 class BaseModel( BaseObject ):
     """ Modeling that are able to manage minuit or scipy inputs"""
 
     PROPERTIES = ["freeparameters"]
     SIDE_PROPERTIES = ["param_input"]
     DERIVED_PROPERTIES = []
-
+    
     # =================== #
     # = Initialization  = #
     # =================== #
-  
+    def __new__(cls,*arg,**kwargs):
+        """ Upgrade of the New function to enable the
+        the _minuit_ black magic
+        """
+        obj = super(BaseModel,cls).__new__(cls)
+        
+        exec "@make_method(BaseModel)\n"+\
+             "def _minuit_chi2_(self,%s): \n"%(", ".join(obj.FREEPARAMETERS))+\
+             "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
+             "    return self.get_chi2(parameters)\n"
+
+        exec "@make_method(BaseModel)\n"+\
+             "def _minuit_lnprob_(self,%s): \n"%(", ".join(obj.FREEPARAMETERS))+\
+             "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
+             "    return self.lnprob(parameters)\n"
+
+        return obj
+    
+        
+    
     # =================== #
     # = Fitter Methods  = #
     # =================== #
-    def get_set_param_input(self):
+    def get_model(self,parameters):
+        """ return the model parameter in format of the data
+        residual should then by ```data - get_model(parameters)```
+
+        This function is not defined here. do so
+        """
+        raise NotImplementedError("The Model has no get_model() defined. Do so.")
+
+    def get_param_input(self):
         """ return a pseudo param_input dictionnary using the currently
         known parameter information (_guess, _fixed, _boundaries).
         Some might have been set manually when creating the dictionnary.
@@ -826,6 +893,12 @@ class BaseModel( BaseObject ):
                 if name+info in dir(self):
                     infodico[name+info] = eval("self.%s"%(name+info))
         return infodico
+    
+    def get_set_param_input(self):
+        """ USE get_param_input """
+        print "WARNING -- Soon DECREPATED use get_param_input"
+        return self.get_param_input()
+    
 
     # ==================== #
     # = Bayesian         = #
@@ -836,7 +909,6 @@ class BaseModel( BaseObject ):
         """ perfectely flat prior, should be change by inheriting classed"""
         if verbose: print "Perfectly flat prior used. Always 0 (set verbose=False to avoid this message)"
         return 0
-        
         
     def lnprob(self,parameters):
         """ This is the Bayesian posterior function (in log).
@@ -924,14 +996,6 @@ class BaseModel( BaseObject ):
             
         return hess
 
-    # -------------------
-    # - Minuit
-    # for the fitter
-    def _minuit_chi2_(self,*args,**kwargs):
-        """
-        """
-        raise NotImplementedError(" _minuit_fit_ must be defined in the child function")
-    
     # -------------------
     # - Scipy
     # shaped like a minuit 
