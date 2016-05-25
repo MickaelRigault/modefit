@@ -862,8 +862,6 @@ class BaseModel( BaseObject ):
 
         return obj
     
-        
-    
     # =================== #
     # = Fitter Methods  = #
     # =================== #
