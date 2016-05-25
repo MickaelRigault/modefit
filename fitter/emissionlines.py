@@ -25,17 +25,14 @@ __all__ = ["linefit"]
 
 
 
+# ============================ #
+#                              #
+#   GLOBAL INFORMATION         #
+#                              #
+# ============================ #
 
-# ===================== #
-#   Global Variables    #
-# ===================== #
 CLIGHT=constants.c.to("km/s").value
 
-# =================================== #
-#                                     #
-#   GLOBAL INFORMATION ABOUT LINES    #
-#                                     #
-# =================================== #
 # - Wavelengths
 # http://zuserver2.star.ucl.ac.uk/~msw/lines.html
 DICT_EMISSIONLINES = {
@@ -64,17 +61,22 @@ for i,l in enumerate(LINENAMES):
     _LINESINDEX[l] = i
     
 
-# ========================== #
-#   Factory                  #
-# ========================== #
+# ============================ #
+#                              #
+#   Factory                    #
+#                              #
+# ============================ #
+
 def linefit(filename,modelname="Mains", **kwargs):
     """ """
     return LinesFitter(filename, modelname="Mains",**kwargs)
 
 
-# ========================== #
-# = Internal Functions     = #
-# ========================== #
+# ============================ #
+#                              #
+#   Internal Functions         #
+#                              #
+# ============================ #
 def gaussian_lines(lbda,x0,sigma,amplitudes=None):
     """ emission lines for the given lbda.
     (based on scipy's normal distribution)
@@ -112,7 +114,7 @@ def gaussian_lines(lbda,x0,sigma,amplitudes=None):
 
 # ============================ #
 #                              #
-#  Usable Priors             = #
+#   Usable Priors              #
 #                              #
 # ============================ #
 def lnprior_amplitudes(amplitudes):
@@ -206,6 +208,7 @@ class LinesFitter( Spectrum, BaseFitter ):
         # doc from BaseFitter
         super(LinesFitter,self).set_model(*args,**kwargs)
         self.model.set_lbda(self.lbda)
+
         
     def get_modelchi2(self,parameters):
         """ get the associated -2 log Likelihood
@@ -230,10 +233,32 @@ class LinesFitter( Spectrum, BaseFitter ):
     # ----------- #
     # - Plotter - #
     # ----------- #
-    def show(self,savefile=None,show=True,
-             variance_onzero=True,add_thumbnails=False,
-             ax=None,**kwargs):
-        """
+    def show(self, savefile=None, show=True, ax=None,
+             mcmc=False, nsample=100,
+             variance_onzero=True, add_thumbnails=False,
+             color="0.7", fitcolor= None, mcmccolor = None,
+             **kwargs):
+        """ display the data vs. the model
+
+        Parameters:
+        -----------
+        savefile: [string/None]
+            where to save the figure. If None, the plot won't be saved
+
+        show: [bool]
+            If the plot is not saved. It is shown except if this is False
+
+        mcmc: [bool]
+            If the mcmc has run, show examples there.
+
+            
+        variance_onzero: [bool]
+            Display the variance around the y=0 axis instead of around
+            the data-points
+
+        color, fitcolor, mcmccolor: [matplotlib's colors]
+            Colors of the data, the best fit, and the mcmc sampling (if any), respectively.
+        
         """
         # --------------
         # - Plot init
@@ -248,19 +273,23 @@ class LinesFitter( Spectrum, BaseFitter ):
         else:
             fig = ax.figure
         
-
         # - Basics
         pl = ax.specplot(self.lbda,self.yfit,self.vfit,
-                         color="0.6",err_onzero=variance_onzero,**kwargs)
-
-        if self.has_fit_run():
-            ymodel = self.model.get_model(self._fitparams)
-            ymodel[~self.model.lbdamask] = np.NaN
-            plmodel = ax.plot(self.model.lbda,ymodel,"r-",
-                              zorder=9,**kwargs)
+                         color=color,err_onzero=variance_onzero,**kwargs)
+        # - Prop of fit
+        prop = dict(color = mpl.cm.Reds(0.7,1.) if fitcolor is None else fitcolor,
+            lw=2, zorder=9)
+            
+        if mcmc:
+            plmodel = self.display_mcmc_models(ax, nsample,
+                                               basecolor = mcmccolor,
+                                               **prop)
         else:
-            plmodel = None
+            plmodel = self.display_model(ax,self._fitparams, **prop) \
+              if self.has_fit_run() else None
 
+        # ---------
+        # - Limits
         yextrem = np.percentile(self.yfit,[1,99])
         ax.set_ylim(yextrem[0] - (yextrem[1]-yextrem[0])*0.05,  yextrem[1] + (yextrem[1]-yextrem[0])*0.05)
         # ------
@@ -271,7 +300,173 @@ class LinesFitter( Spectrum, BaseFitter ):
         
         fig.figout(savefile=savefile,show=show,add_thumbnails=add_thumbnails)        
         return self._plot
+
+
     
+    def show_mains(self,savefile=None, wavelength_window=100,
+                   mcmc=False,**kwargs):
+        """Zoom On Halpha NII + OII1,2 regions. See self.show for more details"""
+        
+        from astrobject.utils.mpladdon import figout
+        from matplotlib.patches        import Rectangle
+        import matplotlib.pyplot       as mpl
+
+        if np.any([a not in self.model.freeparameters for a in ["OII1","HA"]]):
+            raise NotImplementedError(" this method aim at displaying the OII1/OII2,HA and NII lines,"+\
+                                      " at least one of them is not part of the model.")
+        
+        # -- Only Halpha and OII Known -- #
+        
+        guessed_Ha   = DICT_EMISSIONLINES["HA"]   * (1+self.model.velocity_guess/CLIGHT)
+        guessed_OII1 = DICT_EMISSIONLINES["OII1"] * (1+self.model.velocity_guess/CLIGHT)
+        flagHa  = (self.lbda> guessed_Ha-wavelength_window) &(self.lbda< guessed_Ha+wavelength_window)
+        flagOII = (self.lbda> guessed_OII1-wavelength_window) &(self.lbda< guessed_OII1+wavelength_window)
+        
+    
+        # ------------------- #
+        # - Data Info       - #
+        # ------------------- #            
+        fout = self.get_fitvalues(mcmc=mcmc,nonsymerrors=True)
+        
+        # ------------------- #
+        # - Setting         - #
+        # ------------------- #
+        fig   = mpl.figure(figsize=[10,6])
+        axHa  = fig.add_axes([0.52,0.15,0.4,0.78])
+        axOII = fig.add_axes([0.10,0.15, 0.4,0.78])
+        detHa = fout["HA"]/fout["HA.err"][0]
+        colorInfo = {
+            "good":mpl.cm.Greens(0.8),
+            "probably":mpl.cm.Blues(0.8),
+            "maybe":mpl.cm.Oranges(0.8),
+            "*Nope*":mpl.cm.Reds(0.8),
+            "nothing":mpl.cm.Purples(0.8),
+            }
+        if detHa < 2:
+            signal = "nothing"
+        else:
+            if detHa<3:
+                signal = "maybe"
+            elif detHa < 5:
+                signal = "probably"
+            else:
+                signal = "good"
+            
+        # -------------------#
+        #  Do The Plot       #
+        # -------------------#
+        self.show(savefile="_dont_show_",
+                    ax=axHa, fitcolor=colorInfo[signal],
+                    mcmc= mcmc, **kwargs)
+        self.show(savefile="_dont_show_",
+                    ax=axOII,fitcolor=colorInfo[signal],
+                    mcmc= mcmc, **kwargs)
+    
+        axHa.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
+                ["Detection = "+"{:.1f} ".format(detHa)+signal], 
+                handlelength=0, borderaxespad=0., loc="upper right",
+                framealpha=0.7, labelspacing=2, fontsize="large"
+            )
+        axOII.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
+                ["OII = "+"{:.1f}".format((fout["OII1"]+fout["OII2"])/\
+                            np.sqrt(fout["OII1.err"][0]**2+fout["OII2.err"][0]**2))], 
+                handlelength=0, borderaxespad=0., loc="upper left", framealpha=0.7,
+                labelspacing=2, fontsize="large"
+            )
+    
+        # -------------------- #
+        # - Shape it         - #
+        # -------------------- #
+        axHa.set_xlim(guessed_Ha-wavelength_window,
+                      guessed_Ha+wavelength_window)
+        axOII.set_xlim(guessed_OII1-wavelength_window,
+                       guessed_OII1+wavelength_window)
+        
+        # - y bound
+        ymin = np.min(np.concatenate([self.yfit[flagHa],self.yfit[flagOII]]))
+        ymax = np.max(np.concatenate([self.yfit[flagHa],self.yfit[flagOII]]))
+    
+        axHa.set_ylim(ymin,ymax*1.1)
+        axOII.set_ylim(ymin,ymax*1.1)
+    
+        for line in ["HA","NII_1","NII_2","OII1","OII2"]:
+            axHa.axvline(DICT_EMISSIONLINES[line]*(1+fout["velocity"]/CLIGHT),
+                         color="0.7",alpha=0.5)
+            axOII.axvline(DICT_EMISSIONLINES[line]*(1+fout["velocity"]/CLIGHT),
+                          color="0.7",alpha=0.5)
+        # -------------------- #
+        # - Fancy it         - #
+        # -------------------- #
+        from matplotlib.ticker      import NullFormatter
+        axHa.yaxis.set_major_formatter(NullFormatter())
+        axOII.set_ylabel(r"$\mathrm{Flux\ []}$",fontsize="x-large")
+        fig.text(0.5,0.01,r"$\mathrm{Wavelength\ [\AA]}$",fontsize="x-large",
+                 va="bottom",ha="center")
+        
+        fig.figout(savefile=savefile)
+    
+    # ------------------ #
+    #   Plot Add on      #
+    # ------------------ #
+    def display_mcmc_models(self,ax, nsample, color=None,
+                            basecolor=None, alphasample=0.07,**kwargs):
+        """ add mcmc model reconstruction to the plot
+
+        Parameters:
+        -----------
+        ax: [matplotlib.Axes]
+            Where the model should be drawn
+
+        nsample: [int]
+            Number of test case for the mcmc walkers
+
+        color: [matplotlib's color]
+            Color of the main line drawing the 50% samples
+
+        basecolor: [matplotlib's color]
+            Color of the individual sampler (nsample will be displayed)
+
+        **kwargs goes to matplotlib.pyplot
+        Return
+        ------
+        list of matplotlib.plot return
+        """
+        import matplotlib.pyplot as mpl
+        if not self.mcmc.has_ran():
+            raise AttributeError("You need to run MCMC first.")
+        
+        if color is None:
+            color     = mpl.cm.Blues(0.8,1)
+        if basecolor is None:
+            basecolor = mpl.cm.Blues(0.5,0.1)
+        
+        pl = [self.display_model(ax, param, color=basecolor,**kwargs)
+              for param in self.mcmc.samples[np.random.randint(len(self.mcmc.samples), size=100)] ]
+        
+        self.display_model(ax, np.asarray(self.mcmc.derived_values).T[0],
+                           color=color, **kwargs)
+        
+        return pl
+    
+    def display_model(self,ax,parameters,
+                      color="r", ls="-",**kwargs):
+        """ add the model on the plot
+        Parameters
+        ----------
+        ax: [matplotlib.Axes]
+            where the model should be drawn
+            
+        parameters: [array]
+            parameters of the model (similar to the one fitted)
+            
+        Return
+        ------
+        """
+        ymodel = self.get_model(parameters)
+        ymodel[~self.model.lbdamask] = np.NaN
+        return ax.plot(self.model.lbda,ymodel,
+                       color=color,ls=ls,
+                       **kwargs)
     # ====================== #
     # = Properties         = #
     # ====================== #

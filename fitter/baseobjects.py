@@ -33,7 +33,6 @@ class MCMC( BaseObject ):
     # ========================= #
     #   Initialization          #
     # ========================= #
-    
     def __init__(self, lnprob, freeparameters,
                  guess=None,guess_err=None):
         """ The mcmc object
@@ -86,7 +85,8 @@ class MCMC( BaseObject ):
         
         self.setup(**kwargs)
         if not self.is_setup():
-            raise AttributeError("At least one of the following proprety has not been setup: nrun, nwalkers, guess, guess_err")
+            raise AttributeError("At least one of the following proprety" +\
+                                 " has not been setup: nrun, nwalkers, guess, guess_err")
     
         # -- run the mcmc        
         self._derived_properties["sampler"] = emcee.EnsembleSampler(self.nwalkers, self.nparam, self.lnprob)
@@ -166,7 +166,8 @@ class MCMC( BaseObject ):
             cwalker = mpl.cm.binary(0.7,0.2)
         
         # -- ploting            
-        for i, name, fitted in zip(range(self.nparam), self.freeparameters, self.guess if truths is None else truths):
+        for i, name, fitted in zip(range(self.nparam), self.freeparameters,
+                                   self.guess if truths is None else truths):
             ax = fig.add_subplot(self.nparam,1,i+1, ylabel=name)
             _ = ax.plot(np.arange(self.nrun), self.sampler.chain.T[i],
                         color=cwalker,**kwargs)
@@ -321,32 +322,26 @@ class MCMC( BaseObject ):
         """ number of samples avialable (burnin removed) """
         return len(self.samples)
 
-            
+
     @property
     def derived_values(self):
+        """ 3 times N array of the derived parameters
+            [50%, +1sigma (to 84%), -1sigma (to 16%)]
+        """
+        return map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(self.samples, [16, 50, 84],axis=0)))    
+    @property
+    def derived_parameters(self):
         """ dictionary of the mcmc derived values with the structure:
            NAME_OF_THE_PARAMETER = 50% pdf
            NAME_OF_THE_PARAMETER.err = [+1sigma, -1sigma]
         """
-        values = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), zip(*np.percentile(self.samples, [16, 50, 84],axis=0)))
+        values = self.derived_values
         fitout = {}
         for v,name in zip(values, self.freeparameters):
             fitout[name] = v[0]
             fitout[name+".err"] = [v[1],v[2]]
             
         return fitout
-
-    @property
-    def derived_bestparam(self):
-        """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
-        fit = self.derived_values
-        return [fit[name] for name in self.freeparameters]
-    
-    @property
-    def derived_bestparam_err(self):
-        """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
-        fit = self.derived_values
-        return [fit[name+".err"] for name in self.freeparameters]
     
 # ========================================== #
 #                                            #
@@ -436,16 +431,48 @@ class BaseFitter( BaseObject ):
             raise ValueError(" You must define a 'get_modelchi2()' method in your fitter.")
         self.setup_guesses(**kwargs)
 
+    def get_model(self,parameters):
+        """ call the model.get_model() method
+        """
+        return self.model.get_model(parameters)
     
     # --------------------- #
     # -- Ouput Returns   -- #
     # --------------------- #
-    def get_fitvalues(self):
+    def get_fitvalues(self, mcmc=False, nonsymerrors=False):
+        """ get a copy of the fitvalue paramters
+
+        Parameters
+        ----------
+        mcmc: [bool]
+            the parameters estimation made using mcmc.
+
+        nonsymerrors: [bool]
+            if the fitted errors are symmetric this converts the '.err'
+            entry to an array [err,err] 
+        
+        Return
+        ------
+        dictionary (paramname=best_value ; paramname.err = err or [errlow,errup])
         """
-        """
-        if not self.has_fit_run():
-            raise AttributeError("You should fit first !")
-        return self.fitvalues.copy()
+        if mcmc and (not self.has_mcmc() or not self.mcmc.has_ran()):
+            raise ValueError("No mcmc run yet.")
+        
+        if not mcmc and not self.has_fit_run():
+            raise AttributeError("No fit run yet !")
+        # ---------
+        # - MCMC
+        if mcmc:
+            return self.mcmc.derived_parameters.copy()
+        # ---------
+        # - Fit        
+        f = self.fitvalues.copy()
+        if nonsymerrors:
+            for k,v in f.items():
+                if ".err" in k and "__iter__" not in dir(v):
+                    f[k] = [v,v]
+            
+        return f
 
     def get_fval(self):
         """
@@ -736,7 +763,7 @@ class BaseFitter( BaseObject ):
         """ best parameter best on the mcmc run. see mcmc_fitvalues for associated errors """
         if not self.has_mcmc():
             raise AttributeError("run mcmc first.")
-        return self.mcmc.derived_bestparam
+        return self.mcmc.derived_parameters
     
     # -----------------
     # - derived
