@@ -10,14 +10,14 @@ import matplotlib.pyplot as mpl
 from ..utils.tools  import kwargs_update
 from .baseobjects import BaseModel,BaseFitter
 
-__all__ = ["normalfit"]
+__all__ = ["normal", 'truncnormal']
 
 # ========================= #
 #  Main Methods             #
 # ========================= #
-def normalfit(data,errors,names=None,
+def normal(data,errors,names=None,
             masknan=True,**kwargs):
-    """ Adjuste the weighted mean and intrinsic dispersion
+    """ Fit the weighted mean and intrinsic dispersion
     on the data"""
     if masknan:
         flagnan = (data!=data) | (errors !=errors)
@@ -26,6 +26,49 @@ def normalfit(data,errors,names=None,
     
     return UnimodalFit(data,errors,names=names,**kwargs)
 
+
+def truncnormal(data,boundaries,
+                errors=None,names=None,
+                masknan=True,
+                **kwargs):
+    """ Fit a truncated normal distribution on the data
+
+    Parameters:
+    -----------
+    data: [array]
+        data following a normal distribution
+
+    boundaries: [float/None, float/None]
+        boundaries for the data. Set None for no boundaries
+
+    errors, names: [array, array] -optional-
+        error and names of the datapoint, respectively
+        
+    masknan: [bool] -optional-
+        Remove the NaN values entries of the array if True. 
+
+    **kwargs
+
+    Return
+    ------
+    UnimodalFit
+    """
+    # ----------
+    # - Input 
+    if errors is None:
+        errors = np.zeros(len(data))
+        
+    if masknan:
+        flagnan = (data!=data) | (errors !=errors)
+        fit =  UnimodalFit(data[~flagnan],errors[~flagnan],
+                           names=names[~flagnan] if names is not None else None,
+                           modelname="TruncNormal",**kwargs)
+    else:
+        fit =  UnimodalFit(data,errors,
+                           names=names if names is not None else None,
+                           modelname="TruncNormal",**kwargs)
+    fit.model.set_databounds(boundaries)
+    return fit
 # ========================== #
 #                            #
 #     Fitter                 #
@@ -142,7 +185,81 @@ class UnimodalFit( BaseFitter ):
         """
         self.model.setup(parameters)
         return -2 * self.model.get_loglikelihood(self.data,self.errors)
-    
+
+
+    def show(self, parameter, ax=None,savefile=None,show=None,
+             propmodel={},**kwargs):
+        """ show the data and the model for the given parameters
+            
+        Parameters
+        ----------
+        parameter: [array]
+            Parameters setting the model
+
+        ax: [matplotlib.pyplot Axes] -optional-
+            Where the model should be display. if None this
+            will create a new figure and a new axes.
+
+        savefile: [string] -optional-
+            Save the figure at this location.
+            Do not give any extention, this will save a png and a pdf.
+            If None, no figure will be saved, but it will be displayed
+            (see the show arguement)
+
+        show: [bool] -optional-
+            If the figure is not saved, it is displayed except if show
+            is set to False
+        
+        propmodel: [dict] -optional-
+            Properties passed to the model.display method.
+        
+        **kwargs goes to matplotlib's hist method
+
+        Return
+        ------
+        dict (plot information like fig, ax, pl ; output in self._plot)
+        """
+        from astrobject.utils.mpladdon import figout
+        # ----------- #
+        # - setting - #
+        # ----------- #
+        import matplotlib.pyplot as mpl
+        self._plot = {}
+        
+        if ax is None:
+            fig = mpl.figure(figsize=[8,5])
+            ax  = fig.add_axes([0.1,0.1,0.8,0.8])
+        elif "plot" not in dir(ax):
+            raise TypeError("The given 'ax' most likely is not a matplotlib axes. "+\
+                             "No imshow available")
+        else:
+            fig = ax.figure
+
+        # ------------- #
+        # - Prop      - #
+        # ------------- #
+        defprop = dict(fill=True, fc=mpl.cm.Blues(0.3,0.4), ec=mpl.cm.Blues(1.,1),
+                       lw=2, normed=True, histtype="step")
+        prop = kwargs_update(defprop,**kwargs)
+        # ------------- #
+        # - Da Plots  - #
+        # ------------- #
+        ht = ax.hist(self.data,**prop)
+        self.model.setup(parameter)
+        pl = self.model.display(ax,[self.data.min()-self.model.sigma,
+                          self.data.max()+self.model.sigma],
+                      self.errors, **propmodel)
+        # ------------- #
+        # - Output    - #
+        # ------------- #
+        self._plot["figure"] = fig
+        self._plot["ax"]     = ax
+        self._plot["hist"]   = ht
+        self._plot["model"]  = pl
+
+        fig.figout(savefile=savefile,show=show)
+        
+        return self._plot
     # =================== #
     #  Properties         #
     # =================== #
@@ -162,13 +279,16 @@ class UnimodalFit( BaseFitter ):
     def npoints(self):
         return len(self.data)
 
-
-
+# ========================== #
+#                            #
+#     Model                  #
+#                            #
+# ========================== #
 class ModelNormal( BaseModel ):
     """
     """
     FREEPARAMETERS = ["mean","sigma"]
-        
+
     def setup(self,parameters):
         """ """
         self.mean,self.sigma = parameters
@@ -176,18 +296,17 @@ class ModelNormal( BaseModel ):
     # ----------------------- #
     # - LikeLiHood and Chi2 - #
     # ----------------------- #
-    # ----------------------- #
-    # - LikeLiHood and Chi2 - #
-    # ----------------------- #
-    def get_loglikelihood(self,x,dx,p):
-        """ Measure the likelihood to find the data given the model's parameters """
+    def get_loglikelihood(self,x,dx, pdf=False):
+        """ Measure the likelihood to find the data given the model's parameters.
+        Set pdf to True to have the array prior sum of the logs (array not in log=pdf) """
         Li = stats.norm.pdf(x,loc=self.mean,scale=np.sqrt(self.sigma**2 + dx**2))
-        
+        if pdf:
+            return Li
         return np.sum(np.log(Li))
     
     def get_case_likelihood(self,xi,dxi,pi):
         """ return the log likelihood of the given case. See get_loglikelihood """
-        return self.get_loglikelihood([xi],[dxi],[pi])
+        return self.get_loglikelihood([xi],[dxi])
 
 
     # ----------------------- #
@@ -198,10 +317,102 @@ class ModelNormal( BaseModel ):
         return 0
 
     # ----------------------- #
-    # - Model Particularity - #
+    # - Ploting             - #
     # ----------------------- #
-    def _minuit_chi2_(self,mean,sigma):
+    def display(self, ax, xrange, dx, bins=1000,
+                ls="--", color="0.4",**kwargs):
+        """ Display the model on the given plot.
+        This median error is used.
+        """
+        x = np.linspace(xrange[0],xrange[1],bins)
+        lpdf = self.get_loglikelihood(x,np.median(dx), pdf=True)
+        
+        return ax.plot(x,lpdf,ls=ls, color="k", 
+                **kwargs)
+        
+
+class ModelTruncNormal( ModelNormal ):
+    """ Normal distribution allowing for data boundaries
+    (e.g. amplitudes of emission lines are positive gaussian distribution
+    """
+    
+    PROPERTIES = ["databounds"]
+
+
+    def set_databounds(self,databounds):
+        """ boundaries for the data """
+        if len(databounds) != 2:
+            raise ValueError("databounds must have 2 entries [min,max]")
+        self._properties["databounds"] = databounds
+        
+    # ----------------------- #
+    # - LikeLiHood and Chi2 - #
+    # ----------------------- #
+    def get_loglikelihood(self,x,dx, pdf=False):
+        """ Measure the likelihood to find the data given the model's parameters """
+        # info about truncnorm:
+        # stats.truncnorm.pdf(x,f0,f1,loc=mu,scale=sigma))
+        #  => f0 and f1 are the boundaries in sigma units !
+        #  => e.g. stats.truncnorm.pdf(x,-2,3,loc=1,scale=2),
+        #     the values below -2sigma and above 3 sigma are truncated
+
+        tlow,tup = self.get_truncboundaries(dx)
+        Li = stats.truncnorm.pdf(x,tlow,tup,
+                            loc=self.mean, scale=np.sqrt(self.sigma**2 + dx**2))
+        if pdf:
+            return Li
+        return np.sum(np.log(Li))
+
+    def get_truncboundaries(self,dx):
         """
         """
-        parameter = mean,sigma
-        return self.get_chi2(parameter)
+        min_ = -np.inf if self.databounds[0] is None else\
+            (self.databounds[0]-self.mean)/np.sqrt(self.sigma**2 + np.mean(dx)**2)
+        max_ = +np.inf if self.databounds[1] is None else\
+            (self.mean-self.databounds[1])/np.sqrt(self.sigma**2 + np.mean(dx)**2)
+        return min_,max_
+
+    # ----------------------- #
+    # - Ploting             - #
+    # ----------------------- #
+    def display(self, ax, xrange, dx, bins=1000,
+                ls="--", color="0.4", show_boundaries=True,
+                ls_bounds="-", color_bounds="k", lw_bounds=2,
+                **kwargs):
+        """ Display the model on the given plot.
+        This median error is used.
+
+        The Boundaries are added
+        """
+        if show_boundaries:
+            xlim = np.asarray(ax.get_xlim()).copy()
+            if self.databounds[0] is not None:
+                ax.axvline(self.databounds[0], ls=ls_bounds,
+                           color=color_bounds, lw=lw_bounds)
+            if self.databounds[1] is not None:
+                ax.axvline(self.databounds[1], ls=ls_bounds,
+                           color=color_bounds, lw=lw_bounds)
+            ax.set_xlim(*xlim)
+        return super(ModelTruncNormal, self).display( ax, xrange, dx, bins=1000,
+                                ls=ls, color=color,**kwargs)
+        
+    # ========================= #
+    # = Properties            = #  
+    # ========================= # 
+    @property
+    def databounds(self):
+        return self._properties["databounds"]
+
+    @property
+    def _truncbounds_lower(self):
+        """ truncation boundaries for scipy's truncnorm """
+        if self.databounds[0] is None:
+            return -np.inf
+        return (self.databounds[0]-self.mean)/self.sigma
+    
+    @property
+    def _truncbounds_upper(self):
+        """ truncation boundaries for scipy's truncnorm """
+        if self.databounds[1] is None:
+            return np.inf
+        return (self.mean-self.databounds[1])/self.sigma

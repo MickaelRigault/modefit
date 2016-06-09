@@ -14,7 +14,7 @@ from scipy         import stats
 from .baseobjects import BaseModel,BaseFitter
 
 # astrobject dependencies
-from astrobject.astrobject.spectroscopy import Spectrum
+from astrobject.spectroscopy import Spectrum
 
 # - to be removed
 from astrobject.utils.decorators import _autogen_docstring_inheritance
@@ -710,7 +710,7 @@ class LinesModel( BaseModel ):
     # ========================= #
     # = Internal              = #  
     # ========================= #
-    
+    # Nothing here
     
 # -------------------------- #
 #                            #

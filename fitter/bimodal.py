@@ -431,7 +431,8 @@ class StepFit( BimodalFit ):
 
     def show(self,savefile=None,axes=None,#rangey=[-0.6,0.6],
              figure=None,cmap=mpl.cm.ocean,ybihist=True,
-             propaxes={},**kwargs):
+             propaxes={}, rangex=None,rangey=None,
+             binsx=10,binsy=10,**kwargs):
         """ Plot x, data in a 3-axes plot
 
         Parameters:
@@ -456,8 +457,7 @@ class StepFit( BimodalFit ):
         propaxes: [dict]
            properties entering the 'add_threeaxes' as kwargs.
         
-        **kwargs   goes to the mother Class function show_key
-        (e.g., swap_bihistograms, catch_names or any matplotlib.plot entry)
+        **kwargs   goes to matplotlib's Axes.scatter
 
         Returns:
         --------
@@ -470,13 +470,14 @@ class StepFit( BimodalFit ):
         # =================
         if axes is not None:
             if len(axes) != 3:
-                raise ValueErrors("the input 'axes' must be a 3d-array (ax,axhistx,axhisty)")
+                raise ValueErrors("the input 'axes' must be a 3d-array"+\
+                                  " (ax,axhistx,axhisty)")
             ax,axhistx,axhisty = axes
             fig = ax.figure
         else:
             from astrobject.utils.mpladdon import add_threeaxes
             
-            fig = figure if figure is not None else mpl.figure(figsize=[13,10])
+            fig = figure if figure is not None else mpl.figure(figsize=[7,5])
             ax,axhistx,axhisty = fig.add_threeaxes(**propaxes)
 
         # =================
@@ -498,15 +499,19 @@ class StepFit( BimodalFit ):
         # =================
         propa = {"histtype":"step","fc":cmap(0.9,0.4),"ec":"k","fill":True}
         propb = {"histtype":"step","fc":cmap(0.1,0.4),"ec":"k","fill":True}
+        
+        # - x-hist
         if axhistx is not None:
-            axhistx.hist(self.x,weights=1-self.proba,**propb)
-            axhistx.hist(self.x,weights=self.proba,**propa)
-            
+            axhistx.hist(self.x,weights=1-self.proba,
+                         range=rangex,bins=binsx,**propb)
+            axhistx.hist(self.x,weights=self.proba,
+                         range=rangex,bins=binsx,**propa)
+        # - y-hist
         if axhisty is not None:
             axhisty.hist(self.data,weights=1-self.proba,orientation="horizontal",
-                         **propb)
+                         range=rangey,bins=binsy,**propb)
             axhisty.hist(self.data,weights=self.proba*(-1 if ybihist else 1),
-                         orientation="horizontal",
+                         orientation="horizontal",range=rangey,bins=binsy,
                          **propa)
             
             if ybihist:
@@ -537,7 +542,12 @@ class StepFit( BimodalFit ):
                         self.fitout["b"]['mean']+self.fitout["b"]['mean.err'],
                         xmin=cut,
                         color=cmap(0.1,0.2))
-    
+        # ---------
+        # - Plots
+        self._plot = {}
+        self._plot["ax"] = [ax,axhistx,axhisty]
+        self._plot["fig"] = fig
+        return self._plot
     # ========================= #
     # = Properties            = #  
     # ========================= #
