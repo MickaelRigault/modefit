@@ -117,13 +117,14 @@ def gaussian_lines(lbda,x0,sigma,amplitudes=None):
 #   Usable Priors              #
 #                              #
 # ============================ #
-def lnprior_amplitudes(amplitudes):
+def lnprior_amplitudes(amplitudes, boundaries=[0,None]):
     """ flat priors (in log) for amplitudes
     this returns 0 if the amplitudes are
     positives and -inf otherwise 
     """
-    for a in amplitudes:
-        if a<0: return -np.inf
+    for i,a in enumerate(amplitudes):
+        if a<boundaries[0] or (boundaries[1] is not None and a>boundaries[1]):
+            return -np.inf
     return 0
 
 def lnprior_velocity(velocity, velocity_bounds):
@@ -156,10 +157,17 @@ def lnprior_dispersion_flat(dispersion, dispersion_bounds):
         return -np.inf
     return 0
 
-def lnprior_dispersion(dispersion, loc, scale):
+def lnprior_dispersion(dispersion, loc, scale, boundaries=[0,None]):
     """ Gaussian prior estimated from the good line measurement
     made based on flat priors.
+    In addition, the dispersion has to be within the boundaries (None means no boundaries)
     """
+    if boundaries[0] is not None and dispersion<boundaries[0]:
+        return -np.inf
+
+    if boundaries[1] is not None and dispersion>boundaries[1]:
+        return -np.inf
+    
     return np.log(stats.norm.pdf(dispersion,loc=loc, scale=scale))
      
 
@@ -300,9 +308,7 @@ class LinesFitter( Spectrum, BaseFitter ):
         
         fig.figout(savefile=savefile,show=show,add_thumbnails=add_thumbnails)        
         return self._plot
-
-
-    
+  
     def show_mains(self,savefile=None, wavelength_window=100,
                    mcmc=False,**kwargs):
         """Zoom On Halpha NII + OII1,2 regions. See self.show for more details"""
@@ -432,7 +438,7 @@ class LinesFitter( Spectrum, BaseFitter ):
         list of matplotlib.plot return
         """
         import matplotlib.pyplot as mpl
-        if not self.mcmc.has_ran():
+        if not self.mcmc.has_chain():
             raise AttributeError("You need to run MCMC first.")
         
         if color is None:
@@ -531,7 +537,8 @@ class LinesModel( BaseModel ):
     # -- Generic values
     dispersion_guess      = 150
     dispersion_boundaries = [50,250]
-    
+    # - velocity boundaries
+    velocity_boundaries   = [-1e4,1e4]
     def __build__(self,*args,**kwargs):
         """ """
         super(LinesModel,self).__build__(*args,**kwargs)
@@ -616,6 +623,32 @@ class LinesModel( BaseModel ):
     # ---------- #
     # - Setter - #
     # ---------- #
+    def set_maxamplitude(self, value, lines=None):
+        """ define a upper limit for the amplitudes.
+        Be careful with this method
+
+        Parameters
+        ----------
+        value: [int/float]
+            upper limit for the amplitude (in unit of yfit)
+
+        lines: [string array] -optional-
+            name of the emission lines concerned by this limitation.
+            if None, all the lines will be affected.
+
+        Return
+        ------
+        Void
+        """
+        for l in self.freeparameters:
+            if l in LINENAMES or l in DOUBLETS:
+                if lines is not None and l not in lines:
+                    continue
+                if '%s_boundaries'%l not in self.__dict__:
+                    self.__dict__['%s_boundaries'%l] = [0,value]
+                else:
+                    self.__dict__['%s_boundaries'%l][1] = value
+        
     def set_lbda(self, lbda, inwave=True, wavemin=100):
         """ wavelength used for the fit
         
@@ -668,7 +701,7 @@ class LinesModel( BaseModel ):
     def lnprior(self,parameters, loc=170, scale=15):
         """ Default Priors typical emission lines. """
         amplitudes, velocity, dispersion = self.parse_parameters(parameters)
-        return lnprior_amplitudes(amplitudes) + \
+        return lnprior_amplitudes(amplitudes, self.amplitude_boundaries[0]) + \
           lnprior_velocity(velocity,self.velocity_boundaries) + \
           lnprior_dispersion(dispersion,loc=loc, scale=scale)
     
@@ -706,7 +739,13 @@ class LinesModel( BaseModel ):
             
         # - the mask has been set
         return self._derived_properties['lbdamask']
-    
+
+    @property
+    def amplitude_boundaries(self):
+        """ array gathering the amplitude boundaries """
+        return [self.parambounds[i] for i,l in enumerate(self.freeparameters)
+                if l in LINENAMES or l in DOUBLETS]
+         
     # ========================= #
     # = Internal              = #  
     # ========================= #
@@ -797,6 +836,6 @@ class LinesModel_HaNIICont( LinesModel ):
         """ Default Priors typical emission lines. """
         amplitudes, velocity, dispersion, cont, contslope = self.parse_parameters(parameters)
         prior_cont,prior_contslope = 0,0
-        return lnprior_amplitudes(amplitudes) + \
+        return lnprior_amplitudes(amplitudes, self.amplitude_boundaries) + \
           lnprior_velocity(velocity,self.velocity_boundaries) + \
           lnprior_dispersion(dispersion,loc=loc, scale=scale) + prior_cont + prior_contslope

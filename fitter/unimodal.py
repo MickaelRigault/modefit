@@ -187,6 +187,18 @@ class UnimodalFit( BaseFitter ):
         return -2 * self.model.get_loglikelihood(self.data,self.errors)
 
 
+    def get_model(self, parameter):
+        """ Model distribution (from scipy) estiamted for the
+        given parameter. The model dispersion (scale) is the
+        square-root quadratic sum of the model's dispersion
+        and the median data error
+
+        Return
+        ------
+        a scipy distribution
+        """
+        return self.model.get_model(parameter, np.median(self.errors))
+        
     def show(self, parameter, ax=None,savefile=None,show=None,
              propmodel={},**kwargs):
         """ show the data and the model for the given parameters
@@ -211,7 +223,7 @@ class UnimodalFit( BaseFitter ):
             is set to False
         
         propmodel: [dict] -optional-
-            Properties passed to the model.display method.
+            Properties passed to the matplotlib's Axes plot method for the model.
         
         **kwargs goes to matplotlib's hist method
 
@@ -244,11 +256,18 @@ class UnimodalFit( BaseFitter ):
         # ------------- #
         # - Da Plots  - #
         # ------------- #
+        # model range
+        datalim   = [self.data.min()-self.errors.max(),
+                     self.data.max()+self.errors.max()]
+        datarange =datalim[1]-datalim[0]
+        x = np.linspace(datalim[0]-datarange*0.1,datalim[1]+datarange*0.1,
+                        int(datarange*10))
+        # data
         ht = ax.hist(self.data,**prop)
-        self.model.setup(parameter)
-        pl = self.model.display(ax,[self.data.min()-self.model.sigma,
-                          self.data.max()+self.model.sigma],
-                      self.errors, **propmodel)
+        # model
+        prop = kwargs_update(dict(ls="--",color="0.5",lw=2),**propmodel)
+        model_ = self.get_model(parameter)
+        pl = ax.plot(x, model_.pdf(x),**prop)
         # ------------- #
         # - Output    - #
         # ------------- #
@@ -292,7 +311,27 @@ class ModelNormal( BaseModel ):
     def setup(self,parameters):
         """ """
         self.mean,self.sigma = parameters
-        
+
+
+    def get_model(self,parameter, dx):
+        """ Scipy Distribution associated to the
+        given parameters
+
+        Parameters
+        ----------
+        parameter: [array]
+            Parameters setting the model
+        dx: [float]
+            Typical representative error on the data. This is to estimate the
+            effective dispersion of the gaussian
+
+        Return
+        ------
+        scipy.norm
+        """
+        mean, sigma = parameter
+        return stats.norm(loc=mean,scale=np.sqrt(sigma**2 + dx**2))
+    
     # ----------------------- #
     # - LikeLiHood and Chi2 - #
     # ----------------------- #
@@ -344,7 +383,28 @@ class ModelTruncNormal( ModelNormal ):
         if len(databounds) != 2:
             raise ValueError("databounds must have 2 entries [min,max]")
         self._properties["databounds"] = databounds
-        
+
+    def get_model(self,parameter, dx):
+        """ Scipy Distribution associated to the
+        given parameters
+
+        Parameters
+        ----------
+        parameter: [array]
+            Parameters setting the model
+        dx: [float]
+            Typical representative error on the data. This is to estimate the
+            effective dispersion of the gaussian
+
+        Return
+        ------
+        scipy.norm
+        """
+        mean, sigma = parameter
+        tlow,tup = self.get_truncboundaries(dx, mean=mean, sigma=sigma)
+        return  stats.truncnorm(tlow,tup,
+                        loc=mean, scale=np.sqrt(sigma**2 + dx**2))
+    
     # ----------------------- #
     # - LikeLiHood and Chi2 - #
     # ----------------------- #
@@ -363,13 +423,20 @@ class ModelTruncNormal( ModelNormal ):
             return Li
         return np.sum(np.log(Li))
 
-    def get_truncboundaries(self,dx):
+    def get_truncboundaries(self,dx, mean=None, sigma=None):
         """
         """
+        if mean is None:
+            mean = self.mean
+        if sigma is None:
+            sigma= self.sigma
+            
         min_ = -np.inf if self.databounds[0] is None else\
-            (self.databounds[0]-self.mean)/np.sqrt(self.sigma**2 + np.mean(dx)**2)
+            (self.databounds[0]-mean)/np.sqrt(sigma**2 + np.mean(dx)**2)
+            
         max_ = +np.inf if self.databounds[1] is None else\
-            (self.mean-self.databounds[1])/np.sqrt(self.sigma**2 + np.mean(dx)**2)
+            (mean-self.databounds[1])/np.sqrt(sigma**2 + np.mean(dx)**2)
+            
         return min_,max_
 
     # ----------------------- #
