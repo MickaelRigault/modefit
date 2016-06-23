@@ -206,7 +206,7 @@ class LinesFitter( Spectrum, BaseFitter ):
         # - For the fit
         # loaded to later save time
         self._properties['use_minuit']   = use_minuit
-        self._derived_properties['norm'] = np.abs(self.y.mean())
+        self._derived_properties['norm'] = np.abs(np.percentile(self.y, 98))
         self._derived_properties['yfit'] = self.y/self.norm
         if self.has_var:
             self._derived_properties['vfit'] = self.v/self.norm**2
@@ -538,7 +538,7 @@ class LinesModel( BaseModel ):
     dispersion_guess      = 150
     dispersion_boundaries = [50,250]
     # - velocity boundaries
-    velocity_boundaries   = [-1e4,1e4]
+    velocity_boundaries   = [-1e3,1e3]
     def __build__(self,*args,**kwargs):
         """ """
         super(LinesModel,self).__build__(*args,**kwargs)
