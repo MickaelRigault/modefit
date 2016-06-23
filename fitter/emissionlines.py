@@ -369,14 +369,14 @@ class LinesFitter( Spectrum, BaseFitter ):
                     mcmc= mcmc, **kwargs)
     
         axHa.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
-                ["Detection = "+"{:.1f} ".format(detHa)+signal], 
-                handlelength=0, borderaxespad=0., loc="upper right",
-                framealpha=0.7, labelspacing=2, fontsize="large"
+                    ["Detection = "+"{:.1f} ".format(detHa)+signal], 
+                    handlelength=0, borderaxespad=0., loc="upper right",
+                    frameon=False, labelspacing=2, fontsize="large"
             )
         axOII.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
                 ["OII = "+"{:.1f}".format((fout["OII1"]+fout["OII2"])/\
                             np.sqrt(fout["OII1.err"][0]**2+fout["OII2.err"][0]**2))], 
-                handlelength=0, borderaxespad=0., loc="upper left", framealpha=0.7,
+                handlelength=0, borderaxespad=0., loc="upper left", frameon=False,
                 labelspacing=2, fontsize="large"
             )
     

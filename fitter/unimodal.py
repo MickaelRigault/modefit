@@ -7,7 +7,7 @@ import numpy        as np
 from scipy          import stats
 import matplotlib.pyplot as mpl
 # - local dependencies
-from ..utils.tools  import kwargs_update
+from astrobject.utils.tools import kwargs_update
 from .baseobjects import BaseModel,BaseFitter
 
 __all__ = ["normal", 'truncnormal']
