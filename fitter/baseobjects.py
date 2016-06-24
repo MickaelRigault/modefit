@@ -681,7 +681,7 @@ class BaseFitter( BaseObject ):
     # - Bayes & MCMC    - #
     # ------------------- #
     def run_mcmc(self,nrun=2000, walkers_per_dof=3,
-                 init=None,init_err=None):
+                 init=None, init_err=None, verbose=True):
         """ run mcmc from the emcee python code. This might take time
 
         Parameters
@@ -710,12 +710,15 @@ class BaseFitter( BaseObject ):
         guess_err = np.asarray([self.fitvalues[name+".err"]
                                 for name in self.model.freeparameters]) \
                                 if init_err is None else np.asarray(init_err)
+
         self.mcmc.setup(nrun      = nrun,
                         nwalkers  = walkers_per_dof * self.model.nparam,
                         guess     = guess,
                         guess_err = guess_err)
         # -------------
         # - And run it
+        if verbose:
+            print "-> Calling mcmc.run()"
         self.mcmc.run()
 
     def set_mcmc_burnin(self, burnin):
