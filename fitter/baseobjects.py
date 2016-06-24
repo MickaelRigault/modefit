@@ -68,7 +68,7 @@ class MCMC( BaseObject ):
     # ========================= #
     #   Main Methods            #
     # ========================= #
-    def run(self,**kwargs):
+    def run(self,verbose=True,**kwargs):
             
         """ run the mcmc. This method could take time
         (running method based on emcee)
