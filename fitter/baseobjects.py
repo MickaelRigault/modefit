@@ -95,8 +95,13 @@ class MCMC( BaseObject ):
         
         # -- run the mcmc        
         self._derived_properties["sampler"] = emcee.EnsembleSampler(self.nwalkers, self.nparam, self.lnprob)
+        if verbose:
+            print "-> emcee EmsembleSampler defined"
+            
         _ = self.sampler.run_mcmc(self.poswalkers, self.nrun)
         
+        if verbose:
+            print "-> MCMC sampler.run_mcmc() done"
     # ------------ #
     # - SETTER   - #
     # ------------ #
@@ -717,11 +722,10 @@ class BaseFitter( BaseObject ):
                         guess_err = guess_err)
         # -------------
         # - And run it
-        if verbose:
-            print "-> Calling mcmc.run()"
+        
         self.mcmc.run()
-        if verbose:
-            print "-> mcmc.run() Done"
+        
+            
     def set_mcmc_burnin(self, burnin):
         """ set the burnin value above which the walkers are consistants.
         This is required to access the `samples`
