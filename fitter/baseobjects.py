@@ -720,7 +720,8 @@ class BaseFitter( BaseObject ):
         if verbose:
             print "-> Calling mcmc.run()"
         self.mcmc.run()
-
+        if verbose:
+            print "-> mcmc.run() Done"
     def set_mcmc_burnin(self, burnin):
         """ set the burnin value above which the walkers are consistants.
         This is required to access the `samples`
