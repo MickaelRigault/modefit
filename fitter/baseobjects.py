@@ -65,6 +65,7 @@ class MCMC( BaseObject ):
         self._properties["lnprob"] = lnprob
         self._properties["freeparameters"] = freeparameters
         self._side_properties["boundaries_poswalkers"] = boundaries_poswalkers
+        
     # ========================= #
     #   Main Methods            #
     # ========================= #
@@ -383,6 +384,7 @@ class MCMC( BaseObject ):
                                   np.nanmin([self.guess+self.guess_err,bounds.T[1]],axis=0),
                                   size=self.nparam)
                 for i in range(self.nwalkers)]
+    
     @property
     def _boundaries_poswalkers(self):
         """ boundaries for the initial guess of the walkers"""
@@ -705,7 +707,7 @@ class BaseFitter( BaseObject ):
         # -------------
         # - Load MCMC
         self._derived_properties["mcmc"] = MCMC(self.model.lnprob, self.model.freeparameters,
-                                                boundaries_poswalkers=self.model.parambounds)
+                                                boundaries_poswalkers=self.model._mcmc_initbounds)
         
         
         # -------------
@@ -854,6 +856,11 @@ class BaseFitter( BaseObject ):
         """ guess put for the fit """
         return [self.param_input["%s_boundaries"%name]
                 for name in self.model.freeparameters]
+    @property
+    def _mcmc_initbounds(self):
+        """ The mcmc init bounds for a faster mcmc convergence. Defautl parambounds """
+        return self.parambounds if "_mcmc_initbounds" not in dir(self.model) else \
+          self.model._mcmc_initbounds
         
     @property
     def paramfixed(self):

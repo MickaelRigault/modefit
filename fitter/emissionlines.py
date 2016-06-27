@@ -713,7 +713,9 @@ class LinesModel( BaseModel ):
     # ---------- #
     def lnprior(self,parameters, loc_vel=0, scale_vel=500,loc_disp=170, scale_disp=15):
         """ Default Priors typical emission lines. """
+
         amplitudes, velocity, dispersion = self.parse_parameters(parameters)
+        
         return lnprior_amplitudes(amplitudes, self.amplitude_boundaries[0]) + \
           lnprior_velocity(velocity, loc=loc_vel, scale=scale_vel,velocity_bounds=self.velocity_boundaries) + \
           lnprior_dispersion(dispersion,loc=loc_disp, scale=scale_disp)
@@ -758,7 +760,19 @@ class LinesModel( BaseModel ):
         """ array gathering the amplitude boundaries """
         return [self.parambounds[i] for i,l in enumerate(self.freeparameters)
                 if l in LINENAMES or l in DOUBLETS]
-         
+
+
+    # -------------------
+    # - Help mcmc
+    @property
+    def _mcmc_initbounds(self):
+        """ Better initial guess for mcmc not allowing the initialization of the
+        walkers for the too far in redshift."""
+        bounds = np.asarray(self.parambounds).copy().tolist()
+        vindex = np.argwhere(np.asarray(self.FREEPARAMETERS) == "velocity")
+        if len(vindex) >0:
+            bounds[vindex] = [-500,500]
+        return bounds
     # ========================= #
     # = Internal              = #  
     # ========================= #
