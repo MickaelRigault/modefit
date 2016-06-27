@@ -127,7 +127,20 @@ def lnprior_amplitudes(amplitudes, boundaries=[0,None]):
             return -np.inf
     return 0
 
-def lnprior_velocity(velocity, velocity_bounds):
+def lnprior_velocity(velocity, loc=0, scale=500, velocity_bounds=[-1e4,1e4]):
+    """ flat priors (in log) within the given boundaries
+    this returns 0 if the velocity is within the boundaries
+    and -inf otherwise.
+    if velocity_bounds is None or both velocity_bounds[0] and velocity_bounds[1] are
+    None, this will always returns 0
+    """
+    if velocity_bounds[0] is not None and velocity<velocity_bounds[0]:
+        return -np.inf
+    if velocity_bounds[1] is not None and velocity>velocity_bounds[1]:
+        return -np.inf
+    return np.log(stats.norm.pdf(velocity,loc=loc, scale=scale))
+
+def lnprior_velocity_flat(velocity, velocity_bounds):
     """ flat priors (in log) within the given boundaries
     this returns 0 if the velocity is within the boundaries
     and -inf otherwise.
@@ -698,12 +711,12 @@ class LinesModel( BaseModel ):
     # ---------- #
     # - Priors - #
     # ---------- #
-    def lnprior(self,parameters, loc=170, scale=15):
+    def lnprior(self,parameters, loc_vel=0, scale_vel=500,loc_disp=170, scale_disp=15):
         """ Default Priors typical emission lines. """
         amplitudes, velocity, dispersion = self.parse_parameters(parameters)
         return lnprior_amplitudes(amplitudes, self.amplitude_boundaries[0]) + \
-          lnprior_velocity(velocity,self.velocity_boundaries) + \
-          lnprior_dispersion(dispersion,loc=loc, scale=scale)
+          lnprior_velocity(velocity, loc=loc_vel, scale=scale_vel,velocity_bounds=self.velocity_boundaries) + \
+          lnprior_dispersion(dispersion,loc=loc_disp, scale=scale_disp)
     
     # ========================= #
     # = Properties            = #  
