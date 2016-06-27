@@ -706,6 +706,23 @@ class BaseFitter( BaseObject ):
         """
         # -------------
         # - Load MCMC
+        self.set_mcmc(nrun=nrun, walkers_per_dof=walkers_per_dof,
+                    init=init, init_err=init_err, verbose=verbose)
+        
+        # -------------
+        # - And run it
+        if verbose:
+            print " Init walkers ".center(30,"*")
+            self.mcmc.poswalkers
+            print " \Init walkers ".center(30,"*")
+            
+        self.mcmc.run()
+        
+    def set_mcmc(self, nrun=2000, walkers_per_dof=3,
+                 init=None, init_err=None, verbose=True):
+        """ Setup the basic property for the mcmc to run, you just need to say self.mcmc.run()
+            to run it. See also self.run_mcmc()
+        """
         self._derived_properties["mcmc"] = MCMC(self.model.lnprob, self.model.freeparameters,
                                                 boundaries_poswalkers=self.model._mcmc_initbounds)
         
@@ -722,12 +739,8 @@ class BaseFitter( BaseObject ):
                         nwalkers  = walkers_per_dof * self.model.nparam,
                         guess     = guess,
                         guess_err = guess_err)
-        # -------------
-        # - And run it
         
-        self.mcmc.run()
         
-            
     def set_mcmc_burnin(self, burnin):
         """ set the burnin value above which the walkers are consistants.
         This is required to access the `samples`

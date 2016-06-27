@@ -771,7 +771,7 @@ class LinesModel( BaseModel ):
         bounds = np.asarray(self.parambounds).copy().tolist()
         vindex = np.argwhere(np.asarray(self.FREEPARAMETERS) == "velocity")
         if len(vindex) >0:
-            bounds[vindex] = [-500,500]
+            bounds[vindex[0][0]] = [-500,500]
         return bounds
     # ========================= #
     # = Internal              = #  
