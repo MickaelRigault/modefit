@@ -699,26 +699,26 @@ class BaseFitter( BaseObject ):
         walkers_per_dof: [int/float]
             number of walker by degree of freedom (int of nparameter*this used)
             walkers_per_dof should be greater than 2.
-        
+zaza        
         Returns
         -------
         Void (fill the self.mcmc property)
         """
         # -------------
         # - Load MCMC
-        self.set_mcmc(nrun=nrun, walkers_per_dof=walkers_per_dof,
-                    init=init, init_err=init_err, verbose=verbose)
+        self.setup_mcmc(nrun=nrun, walkers_per_dof=walkers_per_dof,
+                        init=init, init_err=init_err, verbose=verbose)
         
         # -------------
         # - And run it
         if verbose:
             print " Init walkers ".center(30,"*")
-            self.mcmc.poswalkers
+            print self.mcmc.poswalkers
             print " \Init walkers ".center(30,"*")
             
         self.mcmc.run()
         
-    def set_mcmc(self, nrun=2000, walkers_per_dof=3,
+    def setup_mcmc(self, nrun=2000, walkers_per_dof=3,
                  init=None, init_err=None, verbose=True):
         """ Setup the basic property for the mcmc to run, you just need to say self.mcmc.run()
             to run it. See also self.run_mcmc()
