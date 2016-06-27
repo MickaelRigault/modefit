@@ -603,13 +603,15 @@ class BaseFitter( BaseObject ):
         return self.minuit.fval if self.use_minuit else \
             self.scipy_output['fun']
 
-    def converged_on_boundaries(self):
+    def converged_on_boundaries(self, tested_parameters="all"):
         """Check if any parameter have converged on any boundary of the model"""
         
         if not self.has_fit_run():
             raise AttributeError("You should fit first !")
 
         for name in self.model.freeparameters:
+            if tested_parameters is not "all" and name not in tested_parameters:
+                continue
             lowerbound,higherbound = eval("self.model.%s_boundaries"%name)
             if lowerbound is not None and \
               "%.4e"%self.fitvalues[name] == "%.4e"%lowerbound :
@@ -711,11 +713,6 @@ zaza
         
         # -------------
         # - And run it
-        if verbose:
-            print " Init walkers ".center(30,"*")
-            print self.mcmc.poswalkers
-            print " \Init walkers ".center(30,"*")
-            
         self.mcmc.run()
         
     def setup_mcmc(self, nrun=2000, walkers_per_dof=3,
