@@ -2,6 +2,6 @@
 
 from unimodal import *
 from bimodal import *
-#from speclines import *
+from cosmo import *
 from emissionlines import linefit
 

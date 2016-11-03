@@ -8,7 +8,7 @@ from scipy          import stats
 import matplotlib.pyplot as mpl
 # - local dependencies
 from astrobject.utils.tools import kwargs_update
-from .baseobjects import BaseModel,BaseFitter
+from .baseobjects import BaseModel,BaseFitter, DataHandler
 
 __all__ = ["normal", 'truncnormal']
 
@@ -74,10 +74,10 @@ def truncnormal(data,boundaries,
 #     Fitter                 #
 #                            #
 # ========================== #
-class UnimodalFit( BaseFitter ):
+class UnimodalFit( BaseFitter, DataHandler ):
     """ """
-    PROPERTIES         = ["data","errors"]
-    SIDE_PROPERTIES    = ["names"]
+    PROPERTIES         = []
+    SIDE_PROPERTIES    = []
     DERIVED_PROPERTIES = []
 
     # =================== #
@@ -126,7 +126,13 @@ class UnimodalFit( BaseFitter ):
         # use_minuit has a setter
         self.use_minuit = use_minuit
         self.set_model(eval("Model%s()"%modelname))
-
+        
+    # =================== #
+    #   Main              #
+    # =================== #
+    # -------- #
+    #  SETTER  #
+    # -------- #
     def set_data(self,data,errors,names=None):
         """ set the information for the fit.
 
@@ -165,28 +171,10 @@ class UnimodalFit( BaseFitter ):
         self._properties["errors"] = np.asarray(errors)
         self._side_properties["names"] = np.asarray(names) if names is not None else None
         
+    def _get_model_args_(self):
+        return self.data[self.used_indexes],self.errors[self.used_indexes]
 
-    # =================== #
-    #   Main              #
-    # =================== #
-    def get_modelchi2(self,parameters):
-        """ Parses the parameters and return the associated -2 log Likelihood
-        Both the parser and the log Likelohood functions belongs to the
-        model.
-        This should usually be passed to the model with loading it. 
-        
-        parameters: [array]
-            a list of parameter as they could be understood
-            by self.model.setup to setup the current model.
-                                   
-        Returns
-        -------
-        float (chi2 defines as -2*log_likelihood)
-        """
-        self.model.setup(parameters)
-        return -2 * self.model.get_loglikelihood(self.data,self.errors)
-
-
+    
     def get_model(self, parameter):
         """ Model distribution (from scipy) estiamted for the
         given parameter. The model dispersion (scale) is the
@@ -279,24 +267,11 @@ class UnimodalFit( BaseFitter ):
         fig.figout(savefile=savefile,show=show)
         
         return self._plot
+
     # =================== #
     #  Properties         #
     # =================== #
-    @property
-    def data(self):
-        return self._properties["data"]
-    
-    @property
-    def errors(self):
-        return self._properties["errors"]
 
-    @property
-    def names(self):
-        return self._side_properties["errors"]
-
-    @property
-    def npoints(self):
-        return len(self.data)
 
 # ========================== #
 #                            #

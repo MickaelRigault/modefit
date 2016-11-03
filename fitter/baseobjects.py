@@ -461,7 +461,109 @@ class MCMC( BaseObject ):
             fitout[name+".err"] = [v[1],v[2]]
             
         return fitout
+
+
+
+class DataHandler( BaseObject ):
+    """ Add on Class to use data and kfolding """
     
+    PROPERTIES         = ["data","error"]
+    SIDE_PROPERTIES    = ["names","used_indexes"]
+    DERIVED_PROPERTIES = ["fold_indexes","kfold"]
+
+    # ==================== #
+    #    Main Method       #
+    # ==================== #
+    
+        
+    # --------------- #
+    #  folding      - #
+    # --------------- #
+    def fold_data(self, kfold, nsamples = 1000):
+        """ """
+        # ---------- #
+        # - inputs - #
+        kfold = int(kfold)
+        if int(kfold) <2:
+            raise ValueError("kfold must be greater than 2 (int), %d given"%(kfold))
+        nsamples = int(nsamples)
+        if int(nsamples) <1:
+            raise ValueError("nsamples must be at least 1 (int), %d given"%(nsamples))
+
+        # ---------- #
+        # - inputs - #
+        indexes = np.arange(self.npoints)
+        noutfold  = int( self.npoints/float(kfold) ) # fold removed
+        
+        self._derived_properties["fold_indexes"] = []
+        for i in range(nsamples):
+            np.random.shuffle(indexes)
+            self._derived_properties["fold_indexes"].append(indexes[noutfold:].copy())
+            
+
+    def run_kfolding(self, kfold, nsamples=1000, **kwargs):
+        """ Set the kfold property that contains a copy of the current instance
+        with a kfolded fit() applied.
+        
+        **kwargs goes to fit()
+        """
+        folded = self.copy()
+        folded.fit(kfold=kfold, nsamples=nsamples, **kwargs)
+        self._derived_properties["kfold"] = folded
+
+    # ==================== #
+    #    Properties        #
+    # ==================== #
+    @property
+    def data(self):
+        """ Data used for the fit """
+        return self._properties["data"]
+    
+    @property
+    def errors(self):
+        """ Errors associated to the data """
+        return self._properties["errors"]
+    
+    @property
+    def names(self):
+        """ Names associated to the data - if set """
+        return self._side_properties["names"]
+
+    @property
+    def npoints(self):
+        return len(self.data)
+
+    # ------------ #
+    #   Folding    #
+    # ------------ #
+    @property
+    def used_indexes(self):
+        """ Indexes of the data used for the fitting """
+        if self._side_properties["used_indexes"] is None:
+            self._side_properties["used_indexes"] = np.arange(self.npoints)
+        return self._side_properties["used_indexes"]
+    
+    def set_used_indexes(self, indexes):
+        """ Indexes of the data used for the fitting """
+        self._side_properties["used_indexes"] = indexes
+
+    @property
+    def kfold(self):
+        """ """
+        return self._derived_properties["kfold"]
+
+    def has_kfold(self):
+        """ Test if the current instance has a kfold set. True means yes"""
+        return self.kfold is not None
+    
+    @property
+    def _foldindexes(self):
+        """ list of indexes to use for the folding """
+        if self._derived_properties["fold_indexes"] is None:
+            warnings.warn("No foilding index defined. returns the list of all indexes")
+            self._derived_properties["fold_indexes"] = [np.arange(self.npoints)]
+            
+        return self._derived_properties["fold_indexes"]
 # ========================================== #
 #                                            #
 #  Use the Scipy-Minuit Tricks               #
@@ -471,19 +573,23 @@ class BaseFitter( BaseObject ):
     """ Mother class for the fitters """
 
     PROPERTIES         = ["param_input","model","use_minuit"]
-    SIDE_PROPERTIES    = []
+    SIDE_PROPERTIES    = ["kfold", "nfold"]
     DERIVED_PROPERTIES = ["fitvalues","mcmc"]
     
     # ========================= #
     # = Initialization        = #  
     # ========================= #
-
+    def copy(self, empty=False):
+        """ """
+        c = super(BaseFitter, self).copy(empty=False)
+        c.set_model(self.model.__new__(self.model.__class__))
+        return c
     # ========================= #
     # = Main Methods          = #  
     # ========================= #
     # ---------------
     # - Da Fit
-    def fit(self,use_minuit=None,
+    def fit(self,use_minuit=None, kfold=None, nsamples=1000,
             **kwargs):
         """
         fit the data following the model.
@@ -502,7 +608,15 @@ class BaseFitter( BaseObject ):
             the user have access to depend on the choice of fitter technique.
             For instance the fixing value concept (see set_guesses) remains with
             scipy.
-                                   
+
+        // K Folding
+
+        kfold: [int, None] -optional-
+        
+        nsamples: [int]
+
+        // Kwargs
+        
         **kwargs parameter associated values with the shape:
             'parametername'_guess, 'parametername'_fixed, 'parametername'_boundaries 
 
@@ -511,21 +625,68 @@ class BaseFitter( BaseObject ):
         Void, create output model values.
                     
         """
-        step = kwargs.pop("step",1)
+        if kfold is not None and DataHandler not in self.__class__.__mro__:
+            raise ValueError("Only Fitter inherating from DataHandler can use k-folding. Set kfold to None")
+        
         self.setup_guesses(**kwargs)
+        self._derived_properties["fitvalues"] = None
         
         if use_minuit is not None:
             self.use_minuit = use_minuit
+
         # --------------
-        # - Run the fit 
+        # - Run the fit
+        # --------------
+        # => No Folding
+        if kfold is None:
+            if DataHandler in self.__class__.__mro__:
+                self.set_used_indexes(np.arange(self.npoints).copy())
+            # Da Fit
+            self._fit_(step=kwargs.pop("step",1))
+            
+        # => Folding
+        else:
+            self.fold_data(kfold, nsamples=nsamples)
+            for i,indexes in enumerate(self._foldindexes):
+                self.set_used_indexes(indexes)
+                # Da Fit
+                self._fit_(step=kwargs.pop("step",1))                
+                self.fitvalues.setdefault("id",[]).append(self.used_indexes)
+
+        if DataHandler in self.__class__.__mro__:
+            self.set_used_indexes(None)
+        self._fit_readout_cleaning_(kfold is not None)
+
+    def _fit_(self, step=1):
+        """ """
         if self.use_minuit:
             self._fit_minuit_(step=step)
         else:
             self._fit_scipy_()
-        # -----------------
-        # - Read out param
+        
         self._fit_readout_()
+        
+    def get_modelchi2(self,parameters):
+        """ get the associated -2 log Likelihood
 
+        This should usually be passed to the model with loading it.
+        (See set_model)
+        
+        Parameters
+        ----------
+        
+        parameters: [array]
+            a list of parameter as they could be understood
+            by self.model.setup to setup the current model.
+                                   
+        Return
+        -------
+        float (-2*log(likelihood))
+        """
+        self.model.setup(parameters)
+        return -2 * self.model.get_loglikelihood(*self._get_model_args_())
+
+    
     # --------------------- #
     # -- Da Model        -- #
     def set_model(self,model,**kwargs):
@@ -701,7 +862,7 @@ class BaseFitter( BaseObject ):
         walkers_per_dof: [int/float]
             number of walker by degree of freedom (int of nparameter*this used)
             walkers_per_dof should be greater than 2.
-zaza        
+
         Returns
         -------
         Void (fill the self.mcmc property)
@@ -941,24 +1102,33 @@ zaza
     # ====================== #
     # = Internal Methods   = #
     # ====================== #
-    def _fit_readout_(self):
+    def _fit_readout_(self, kfolding=False):
         """ Gather the output in the readout, you could improve that in you child class"""
         
         for i,name in enumerate(self.model.freeparameters):
-            self.fitvalues[name] = self._fitparams[i]
-            self.fitvalues[name+".err"] = np.sqrt(self.covmatrix[i,i])
-            
+            self.fitvalues.setdefault(name,[]).append(self._fitparams[i])
+            self.fitvalues.setdefault(name+".err",[]).append(np.sqrt(self.covmatrix[i,i]))
+                
         # -- Additional data -- #
-        self.fitvalues["chi2"]    = self.get_fval()
+        self.fitvalues.setdefault("chi2",[]).append(self.get_fval())
 
+    def _fit_readout_cleaning_(self, folding):
+        """ """
+        if not folding:
+            # no folding so cleaning the fitvalue
+            for k,v in self.fitvalues.items():
+                self.fitvalues[k] = v[0] if hasattr(v,"__iter__") else v
+        else:
+            for k,v in self.fitvalues.items():
+                self.fitvalues[k] = np.asarray(v)
     # --------------
     #  Minuit
     # --------------    
-    def _fit_minuit_(self,verbose=True, step=1):
+    def _fit_minuit_(self,verbose=False, step=1):
         """
         """
         self._setup_minuit_(step=step)
-        print "STARTS MINUIT FIT"
+        if verbose: print "STARTS MINUIT FIT"
         self._migrad_output_ = self.minuit.migrad()
         
         if self._migrad_output_[0]["is_valid"] is False:
@@ -970,7 +1140,7 @@ zaza
         self._fitparams = np.asarray([self.minuit.values[k]
                               for k in self.model.freeparameters])
         
-    def _setup_minuit_(self, step=1):
+    def _setup_minuit_(self, step=1, print_level=0):
         """
         """
         if "_guesses" not in dir(self):
@@ -984,7 +1154,7 @@ zaza
             minuit_kwargs["fix_"+param]    = self.param_input["%s_fixed"%param]
 
         self.minuit = Minuit(self.model._minuit_chi2_,
-                             print_level=1,errordef=step,
+                             print_level=print_level,errordef=step,
                              **minuit_kwargs)
     # ----------------
     #  Scipy
