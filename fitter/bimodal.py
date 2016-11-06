@@ -18,8 +18,45 @@ __all__ = ["stepfit"]
 #  Main Methods             #
 # ========================= #
 def stepfit(x,data,errors,proba=None,dx=None,xcut=None,
-                masknan=True, names=None, **kwargs):
-    """ Load a StepFit instance to fit a step in your data """
+            masknan=True, names=None, **kwargs):
+    """ Fit a Step in you Data !
+    This function will return a StepFit object that will allow you
+    to fit a step in you data and easily analysis this step.
+
+    Parameters
+    ----------
+    x: [array]
+        The x-axis of you data that will be used to define which point is
+        above or below the given xcut value.
+        If proba if provided, this will only be used for plotting.
+
+    data, errors: [array, array]
+        The y-axis data (and its errors) that potentially is bimodal.
+
+
+    proba: [array] -optional-
+        If you already know the probability for each point to be below (0) or
+        above (1) the step, them give it here.
+    
+    dx: [array] -optional-
+        If proba is None, dx (the error on the x-axis) will enable to measure the
+        probability to be above or below the step (at x=xcut).
+        If proba is None and dx is None, the proba will be ones and zeros.
+
+    xcut: [float] -optional / required if proba is None -
+        Define where the step is located.
+        If proba is given, this will only be used for plotting
+
+    masknan: [bool] -optional-
+        Remove the nan values (in x, data or errors) prior to load StepFit
+
+    names: [array] -optional-
+        names for the data points.
+
+    Returns
+    -------
+    StepFit.
+    """
     if masknan:
         flagnan = (x!=x) | (data !=data) | (errors != errors)
         
@@ -389,7 +426,7 @@ class StepFit( BimodalFit ):
     # = Step Shows            = #  
     # ========================= #
     def show(self,savefile=None,axes=None,#rangey=[-0.6,0.6],
-             figure=None,cmap=mpl.cm.ocean,ybihist=True,
+             figure=None,cmap=mpl.cm.viridis, ybihist=True,
              propaxes={}, rangex=None,rangey=None,
              binsx=10,binsy=10,**kwargs):
         """ Plot x, data in a 3-axes plot
