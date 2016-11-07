@@ -882,7 +882,7 @@ class BaseFitter( BaseObject ):
             to run it. See also self.run_mcmc()
         """
         self._derived_properties["mcmc"] = MCMC(self.model.lnprob, self.model.freeparameters,
-                                                boundaries_poswalkers=self.model._mcmc_initbounds)
+                                                boundaries_poswalkers=self._mcmc_initbounds)
         
         
         # -------------

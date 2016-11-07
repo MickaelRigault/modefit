@@ -282,11 +282,15 @@ class ModelBinormal( BaseModel ):
         cdf = self.cdf(x, dx, p )
         outlier_cut = outlier_cut/(2.*len(x))
         return (cdf<outlier_cut) + (cdf>(1-outlier_cut))
+    
     # ----------------------- #
     # - Bayesian methods    - #
     # ----------------------- #
     def lnprior(self,parameter):
         """ so far a flat prior """
+        for name_param,p in zip(self.FREEPARAMETERS, parameter):
+            if "sigma" in name_param and p<0:
+                return -np.inf
         return 0
 
     # ----------------------- #
@@ -425,9 +429,10 @@ class StepFit( BimodalFit ):
     # ========================= #
     # = Step Shows            = #  
     # ========================= #
-    def show(self,savefile=None,axes=None,#rangey=[-0.6,0.6],
+    def show(self,savefile=None,axes=None, #rangey=[-0.6,0.6],
              figure=None,cmap=mpl.cm.viridis, ybihist=True,
              propaxes={}, rangex=None,rangey=None,
+             show_xhist=False,
              binsx=10,binsy=10,**kwargs):
         """ Plot x, data in a 3-axes plot
 
@@ -472,17 +477,19 @@ class StepFit( BimodalFit ):
             fig = ax.figure
         else:
             from astrobject.utils.mpladdon import add_threeaxes
-            fig = figure if figure is not None else mpl.figure(figsize=[7,5])
-            ax,axhistx,axhisty = fig.add_threeaxes(**propaxes)
+            fig = figure if figure is not None else \
+              mpl.figure(figsize=[7,5]) if show_xhist else mpl.figure(figsize=[8,4])
+            ax,axhistx,axhisty = fig.add_threeaxes(xhist=show_xhist,**propaxes)
 
         # =================
         # The Scatter Plot
         # =================
         ecolor = kwargs.pop("ecolor","0.7")
         ax.errorbar(self.x,self.data,xerr=self.dx,yerr=self.errors,
-                    ecolor=ecolor,ls="None", marker=None,label="_no_legend_", zorder=2)
+                    ecolor=ecolor,ls="None", marker=None,label="_no_legend_",
+                    zorder=2)
 
-        prop = kwargs_update({"s":80,"edgecolors":"0.7","linewidths":1,"zorder":5,},
+        prop = kwargs_update({"s":150,"edgecolors":"0.7","linewidths":1,"zorder":5,},
                              **kwargs)
         ax.scatter(self.x,self.data,c=self.proba,cmap=cmap,
                    **prop)
@@ -492,8 +499,8 @@ class StepFit( BimodalFit ):
         # =================
         # The Histograms
         # =================
-        propa = {"histtype":"step","fc":cmap(0.9,0.4),"ec":"k","fill":True}
-        propb = {"histtype":"step","fc":cmap(0.1,0.4),"ec":"k","fill":True}
+        propa = {"histtype":"bar","fc":cmap(0.95),"ec":ecolor,"fill":True}
+        propb = {"histtype":"bar","fc":cmap(0.05),"ec":ecolor,"fill":True}
         
         # - x-hist
         if axhistx is not None:
@@ -510,7 +517,7 @@ class StepFit( BimodalFit ):
                          **propa)
             
             if ybihist:
-                axhisty.set_xlim(-axhisty.get_xlim()[-1],axhisty.get_xlim()[-1])
+                axhisty.set_xlim(-axhisty.get_xlim()[-1]*1.2,axhisty.get_xlim()[-1]*1.2)
                 
         # =================
         # The Fitted Values
@@ -530,20 +537,21 @@ class StepFit( BimodalFit ):
                       self.fitvalues['mean_a'],self.fitvalues['mean_a.err'], \
                       self.fitvalues['mean_b'],self.fitvalues['mean_b.err']
 
+            line_prop = dict(zorder=4)
             for ax_,cut in [[ax,self.xcut],[axhisty,0]]:
                 if ax_ is None: continue
                 
                 ax_.hline(mean_a,xmax=cut,
-                       color=mpl.cm.binary(0.9),alpha=0.8)
+                       color=cmap(0.95),alpha=0.8, **line_prop)
                 ax_.hspan(mean_a-mean_aerr,mean_a+mean_aerr,
-                        xmax=cut,
-                        color=mpl.cm.binary(0.9),alpha=0.2)
+                        xmax=cut,edgecolor="0.7",
+                        color=cmap(0.95,0.2),**line_prop)
             
                 ax_.hline(mean_b,xmin=cut,
-                     color=cmap(0.1,0.8))
+                     color=cmap(0.05,0.8),**line_prop)
                 ax_.hspan(mean_b-mean_berr,mean_b+mean_berr,
-                        xmin=cut,
-                        color=cmap(0.1,0.2))
+                        xmin=cut,edgecolor="0.7",
+                        color=cmap(0.05,0.2),**line_prop)
                 
         # ---------
         # - Plots

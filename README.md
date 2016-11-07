@@ -6,6 +6,7 @@ Currently, the following models are implemented:
 * **binormal step** (step_fitter). It has 4 parameters: mean_a, mean_b, sigma_a, sigma_b, which are the mean and the dispersion (sigma) of the normal distributions a and b, respectively. Each datapoint can have a probability `proba` (1-`proba`) to belong to the group "a"  ("b"). 
 
 
+
 ## Dependencies
 
 * iminuit (>1.1)

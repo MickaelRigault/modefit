@@ -282,7 +282,9 @@ class ModelNormal( BaseModel ):
     """
     """
     FREEPARAMETERS = ["mean","sigma"]
-
+    
+    sigma_boundaries = [0,None]
+    
     def setup(self,parameters):
         """ """
         self.mean,self.sigma = parameters
@@ -322,12 +324,14 @@ class ModelNormal( BaseModel ):
         """ return the log likelihood of the given case. See get_loglikelihood """
         return self.get_loglikelihood([xi],[dxi])
 
-
     # ----------------------- #
     # - Bayesian methods    - #
     # ----------------------- #
     def lnprior(self,parameter):
         """ so far a flat prior """
+        for name_param,p in zip(self.FREEPARAMETERS, parameter):
+            if "sigma" in name_param and p<0:
+                return -np.inf
         return 0
 
     # ----------------------- #
