@@ -464,18 +464,18 @@ class MCMC( BaseObject ):
 
 
 
-class DataHandler( BaseObject ):
-    """ Add on Class to use data and kfolding """
-    
-    PROPERTIES         = ["data","error"]
-    SIDE_PROPERTIES    = ["names","used_indexes"]
+class _KFolder_( BaseObject ):
+    """ Virtual class To be packed with DataHandlers-like ones.
+    This Virtual class enables to easily deal with K-folding
+    """
+    PROPERTIES         = []
+    SIDE_PROPERTIES    = ["used_indexes"]
     DERIVED_PROPERTIES = ["fold_indexes","kfold"]
 
     # ==================== #
     #    Main Method       #
     # ==================== #
-    
-        
+
     # --------------- #
     #  folding      - #
     # --------------- #
@@ -514,25 +514,6 @@ class DataHandler( BaseObject ):
     # ==================== #
     #    Properties        #
     # ==================== #
-    @property
-    def data(self):
-        """ Data used for the fit """
-        return self._properties["data"]
-    
-    @property
-    def errors(self):
-        """ Errors associated to the data """
-        return self._properties["errors"]
-    
-    @property
-    def names(self):
-        """ Names associated to the data - if set """
-        return self._side_properties["names"]
-
-    @property
-    def npoints(self):
-        return len(self.data)
-
     # ------------ #
     #   Folding    #
     # ------------ #
@@ -564,6 +545,108 @@ class DataHandler( BaseObject ):
             self._derived_properties["fold_indexes"] = [np.arange(self.npoints)]
             
         return self._derived_properties["fold_indexes"]
+
+
+class DataHandler( _KFolder_ ):
+    """ """
+    PROPERTIES         = ["data","error"]
+    SIDE_PROPERTIES    = ["names"]
+    DERIVED_PROPERTIES = []
+
+    # ============== #
+    #  Main Methods  #
+    # ============== #
+    def set_data(self, data, errors=None, names=None):
+        """ Basic method to set the data """
+        self._properties["data"]   = data
+        self._properties["errors"] = errors
+        self._properties["names"]  = names
+        
+    # ============== #
+    #  Properties    #
+    # ============== #
+    @property
+    def data(self):
+        """ Data used for the fit """
+        return self._properties["data"]
+    
+    @property
+    def errors(self):
+        """ Errors associated to the data """
+        return self._properties["errors"]
+    
+    @property
+    def names(self):
+        """ Names associated to the data - if set """
+        return self._side_properties["names"]
+
+    @property
+    def npoints(self):
+        return len(self.data)
+
+    
+class DataSourceHandler( _KFolder_ ):
+    """ Deal with complex data sources, which are dictionary oriented """
+    PROPERTIES         = ["data"]
+    SIDE_PROPERTIES    = []
+    DERIVED_PROPERTIES = []
+
+    # =============== #
+    #  Main Methods   #
+    # =============== #
+    # ---------- #
+    #  SETTER    #
+    # ---------- #
+    def set_data(self, data):
+        """ data must be a dictionary with names as entries and values then:
+        data = {NAME1:{k1:v11, k2:v21 ....}, NAME2:{k1:v12, k2:v22....}, ...}
+        """
+        self._properties["data"] = data
+
+    # ---------- #
+    #  GETTER    #
+    # ---------- #
+    def get(self, key, names=None, default=None):
+        """ Return the value(s) for the given key
+        The value is returned for the list of names. If None, this is will
+        be all the known names
+        """
+        names = self.names if names is None else names
+        if hasattr(names,"__iter__"):
+            return np.asarray([self.data[name_][key] if key in self.data[name_].keys() else default
+                    for name_ in names])
+        
+        return self.data[names][key] if key in self.data[names].keys() else default
+    
+    # =============== #
+    #  Properties     #
+    # =============== #
+    @property
+    def data(self):
+        """ Data used for the fit """
+        if self._properties["data"] is None:
+            warnings.warn("Empty Data")
+            self._properties["data"] = {}
+            
+        return self._properties["data"]
+    
+    # Names and Size
+    # ---------------
+    @property
+    def names(self):
+        """ """
+        return np.sort(self._orig_names)
+    
+    @property
+    def _orig_names(self):
+        """ """
+        return self.data.keys()
+
+    @property
+    def npoints(self):
+        """ number of points in data """
+        return len(self._orig_names)
+    
 # ========================================== #
 #                                            #
 #  Use the Scipy-Minuit Tricks               #
