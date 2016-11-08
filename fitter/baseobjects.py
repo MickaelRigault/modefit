@@ -546,8 +546,8 @@ class _KFolder_( BaseObject ):
             
         return self._derived_properties["fold_indexes"]
 
-
-class DataHandler( _KFolder_ ):
+    
+class DataHandler( _KFolder_):
     """ """
     PROPERTIES         = ["data","error"]
     SIDE_PROPERTIES    = ["names"]
@@ -667,6 +667,7 @@ class BaseFitter( BaseObject ):
         c = super(BaseFitter, self).copy(empty=False)
         c.set_model(self.model.__new__(self.model.__class__))
         return c
+    
     # ========================= #
     # = Main Methods          = #  
     # ========================= #
@@ -997,7 +998,7 @@ class BaseFitter( BaseObject ):
         self._derived_properties["mcmc"] = mcmc
         
     # ==================== #
-    # = Ploting Methods  = #
+    #  Ploting Methods     #
     # ==================== #        
     def show_mcmc_corner(self, savefile=None, show=True,
                          truths=None,**kwargs):
@@ -1057,6 +1058,18 @@ class BaseFitter( BaseObject ):
     def is_model_set(self):
         """ Test if the model has been set. True means yes """
         return self._properties["model"] is not None
+    
+    @property
+    def dof(self):
+        """ return the degree of freedom
+        size of the datapoint - number of non-fixed parameters 
+        """
+        if not hasattr(self, "npoints"):
+            raise AttributeError("npoints not define in this model")
+        if not self.is_model_set():
+            raise AttributeError("No model defined")
+        
+        return self.npoints - self.model.nparam + np.sum(self.model.paramfixed)
     
     # -----------------------
     # - fit associated values

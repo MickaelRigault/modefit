@@ -6,7 +6,7 @@
 import warnings
 import numpy             as np
 import matplotlib.pyplot as mpl
-from scipy          import stats, linalg
+from scipy          import stats, linalg, optimize
 
 # - Astropy
 from astropy import constants
@@ -16,9 +16,6 @@ try:
 except:
     from astropy.cosmology import Planck13 as DEFAULT_COSMO
     warnings.warn("Your astropy is not up to data. This will use Planck13 cosmology instead of Planck15")
-
-# - Astrobject
-from astrobject.utils.tools import kwargs_update
 
 # - Local Dependencies
 from .baseobjects import BaseModel, BaseFitter, DataSourceHandler
@@ -181,7 +178,8 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     #  FITTER  #
     # -------- #
     # This is only there for the intrinsic stuff
-    def fit(self, intrinsic=0,
+    def fit(self, verbose=True, intrinsic=0,
+            seek_chi2dof_1=True, chi2dof_margin=0.01,
             use_minuit=None, kfold=None, nsamples=1000,**kwargs):
         """ fit the data on the model
 
@@ -192,6 +190,9 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         intrinsic: [float/array] -optional-
             Intrinsic dispersion added in quadrature to the variances of the
             datapoint (estimated from the covariance matrix).
+
+        verbose: [bool] -optional-
+            Have printed information about the fit (chi2 and intrinsic dispersion )
             
         // Fitter to use
         
@@ -223,7 +224,33 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         Void, create output model values.
         """
         self.model.set_intrinsic(intrinsic)
-        return super(HubbleFit,self).fit(**kwargs)
+        
+        output = super(HubbleFit,self).fit(**kwargs)
+
+        #  Check intrinsic
+        # ------------------
+        if np.abs(self.fitvalues["chi2"]/self.dof - 1)>chi2dof_margin and seek_chi2dof_1:
+            # => Intrinsic to be added
+            if verbose:
+                print " Look for intrinsic dispersion: current chi2 %.2f for %d dof"%(self.fitvalues["chi2"],self.dof)
+            return self.fit(intrinsic=self.fit_intrinsic(),
+                            seek_chi2dof_1=False, chi2dof_margin=chi2dof_margin,
+                            use_minuit=use_minuit, kfold=kfold, nsamples=nsamples,**kwargs)
+        else:
+            # => No intrinsic to be added
+            if verbose:
+                print " Used intrinsic dispersion %.3f: chi2 %.2f for %d dof"%(self.model.intrinsic_dispersion, self.fitvalues["chi2"], self.dof)
+            return output
+        
+            
+    def fit_intrinsic(self, intrinsic_guess=0.1):
+        """ """
+        def get_intrinsic_chi2dof(intrinsic):
+            self.model.set_intrinsic(intrinsic)
+            return np.abs(self.get_modelchi2(self._fitparams) / self.dof -1)
+        
+        return optimize.fmin(get_intrinsic_chi2dof,
+                             intrinsic_guess, disp=0)[0]
         
     # -------- #
     #  GETTER  #
