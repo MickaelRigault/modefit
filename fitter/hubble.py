@@ -1,31 +1,33 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" module to perform Hubble Diagram fit based on Type Ia Supernovae """
-
-import numpy as np
+""" Module to fit Hubble Diagram of Type Ia Supernovae """
 
 import warnings
-from scipy          import stats, linalg
+import numpy             as np
 import matplotlib.pyplot as mpl
+from scipy          import stats, linalg
+
+# - Astropy
 from astropy import constants
-
-# - local dependencies
-from astrobject.utils.tools import kwargs_update
-
-from .baseobjects import BaseModel, BaseFitter, DataSourceHandler
 import astropy
 try:
     from astropy.cosmology import Planck15 as DEFAULT_COSMO
 except:
     from astropy.cosmology import Planck13 as DEFAULT_COSMO
     warnings.warn("Your astropy is not up to data. This will use Planck13 cosmology instead of Planck15")
+
+# - Astrobject
+from astrobject.utils.tools import kwargs_update
+
+# - Local Dependencies
+from .baseobjects import BaseModel, BaseFitter, DataSourceHandler
     
 
 __all__ = ["get_hubblefit"]
 
     
-CLIGHT_km_s  = constants.c.to("km/s").value
+CLIGHT_km_s = constants.c.to("km/s").value
 PECULIAR_VELOCITY = 300 # in km/s
 
 ###############################
@@ -33,7 +35,7 @@ PECULIAR_VELOCITY = 300 # in km/s
 #   Main Tools                #
 #                             #
 ###############################
-def get_hubblefit(data, corr=["x1,c"]):
+def get_hubblefit(data, corr=["x1,c"], **kwargs):
     """ get an object that allows you to do Hubble fit (hubblizer)
 
     Parameters
@@ -46,7 +48,7 @@ def get_hubblefit(data, corr=["x1,c"]):
                cov_kk2: cov_between_k_and_k2,
                cov_k2k: cov_between_k_and_k2,
                etc.
-               }
+               }}
         empty entries will be assumed to be 0
 
         Requested parameters:
@@ -63,14 +65,13 @@ def get_hubblefit(data, corr=["x1,c"]):
     ------
     HubbleFit object
     """
-    return HubbleFit(data, corr=corr)
+    return HubbleFit(data, corr=corr, **kwargs)
 
-
-
-def onflight_model(corr):
-    """ builds on the flight a Object corresponding to the correction you want.
+def stadardization_model(corr):
+    """ 
+    This function builds and returns the Model used to fit the
+    Hubble Data with the defined standardization parameter.
     
-    This returns this object
     Returns
     -------
     Child of ModelStandardization (with set  STANDARDIZATION)
@@ -91,7 +92,6 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     SIDE_PROPERTIES    = ["pec_velocity"]
     DERIVED_PROPERTIES = ["sndata"]
 
-
     # =============== #
     #  Main Methods   #
     # =============== #
@@ -110,7 +110,7 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
                     cov_kk2: cov_between_k_and_k2,
                     cov_k2k: cov_between_k_and_k2,
                     etc.
-                   }
+                   }}
             empty entries will be assumed to be 0
 
             Requested parameters:
@@ -139,17 +139,24 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         self.set_data(data)
         # -- for the fit
         # use_minuit has a setter
-        self.set_model(make_new_class(corr))
+        self.set_model(stadardization_model(corr))
         self.build_sndata(add_zerror=add_zerror, add_lenserr=add_lenserr)
-
     
     # ---------- #
     #  BUILDER   #
     # ---------- #
-
-    
     def build_sndata(self, add_zerror=True, add_lenserr=True):
-        """ """
+        """ build the sndata dictionary used to fit the Hubble diagram
+        
+        Parameters:
+        ----------
+        add_lenserr,add_zerror: [bool] -optional-
+            (though set_covariance_matrix)
+            Include the peciluar dispersion/redshift error (add_zerror)
+            and lensing error (add_zerror) on the covariance matrix.
+            NB: lensing error is set to 0.055*z (Conley et al. 2011, Betoule et al. 2014)
+
+        """
         self.sndata["zcmb"] = self.get("zcmb")
         self.sndata["mag"]  = self.get("mag")
         self.sndata["corrections"] = np.asarray([self.get(param) for param in self.model.STANDARDIZATION])
@@ -176,10 +183,47 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     # This is only there for the intrinsic stuff
     def fit(self, intrinsic=0,
             use_minuit=None, kfold=None, nsamples=1000,**kwargs):
-        """ """
+        """ fit the data on the model
+
+        *Important* minuit fit require a chi2/dof to estimate the errors.
+        
+        Parameters:
+        -----------
+        intrinsic: [float/array] -optional-
+            Intrinsic dispersion added in quadrature to the variances of the
+            datapoint (estimated from the covariance matrix).
+            
+        // Fitter to use
+        
+        use_minuit: [bool/None] -optional-
+            If None, this will use the object's current *use_minuit* value.
+            If bool, this will set the technique used to fit the *model*
+            to the *data* and will thus overwrite the existing
+            *self.use_minuit* value.
+            Minuit is the iminuit library.
+            Scipy.minimize is the alterntive technique.
+            The internal functions are made such that none of the other function
+            the user have access to depend on the choice of fitter technique.
+            For instance the fixing value concept (see set_guesses) remains with
+            scipy.
+
+        // K Folding
+
+        kfold: [int, None] -optional-
+        
+        nsamples: [int]
+
+        // Kwargs
+        
+        **kwargs parameter associated values with the shape:
+            'parametername'_guess, 'parametername'_fixed, 'parametername'_boundaries 
+
+        Returns:
+        --------
+        Void, create output model values.
+        """
         self.model.set_intrinsic(intrinsic)
         return super(HubbleFit,self).fit(**kwargs)
-    
         
     # -------- #
     #  GETTER  #
@@ -192,7 +236,6 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         
         Parameters
         ----------
-        
         parameters: [array]
             a list of parameter as they could be understood
             by self.model.setup to setup the current model.
@@ -208,14 +251,28 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     # -------- #
     #  SETTER  #
     # -------- #
-    
-    #  Covariance Matrix  
-    # ------------------- 
-    def set_covariance_matrix(self, cov, add_zerror=True, add_lenserr=True):
+    # - Covariance Matrix  
+    def set_covariance_matrix(self, covmatrix, add_zerror=True, add_lenserr=True):
+        """ sets a copy of the given covariance matrix to the sndata,
+        which is used to fit the Hubble Fit.
+        
+        Parameters:
+        -----------
+        covmatrix: [NxMxM]
+            Covariance matrix for the N data point to be fitted.
+            Each MxM covariance matrix between the standardization
+            parameters. M is the number of freeparameters.
+        
+        add_lenserr,add_zerror: [bool] -optional-
+            Include the peciluar dispersion/redshift error (add_zerror)
+            and lensing error (add_zerror) on the covariance matrix.
+            NB: lensing error is set to 0.055*z (Conley et al. 2011, Betoule et al. 2014)
+
+        Returns
+        -------
+        Void
         """
-        add_lenserr: 0.055*z based on Betoule 2014, Conley 2011
-        """
-        covmat = cov.copy()
+        covmat = covmatrix.copy()
         if add_zerror:    
             self.add_to_covmatrix(covmat, self.systerror_redshift_doppler**2)
         if add_zerror:
@@ -224,8 +281,14 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         self.sndata["covmatrix"] = covmat
 
     def add_to_covmatrix(self, covmat, value):
-        """ add a diagonal term to the covariance
-        For instance redshift error, intrinsic dispsersion, weak leasing
+        """ add a diagonal term to the covariance.
+
+        Method used to add the redshift error and weak leasing on the
+        covariance matrix
+        
+        Returns
+        -------
+        Void
         """
         if not hasattr(value,"__iter__"):
             for i in range(self.npoints):
@@ -233,12 +296,8 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         else:
             for i in range(self.npoints):
                 covmat[i][0][0] += value[i]
-                
-        return covmat
-
     
-    # Peculiar Velocity
-    # ------------------- 
+    # - Peculiar Velocity
     def set_peculiar_velocity(self, velocity_km_s):
         """ Set the peculiar velocity that should be used
         for the data.
@@ -250,6 +309,7 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
             float: this will be the same for every objects (could be 0)
             array: this array must have the size of the data. Each point
                    could then have its own peculiar velocity
+                   
         Returns
         -------
         Void
@@ -259,7 +319,8 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
 
         if hasattr(velocity_km_s,"__iter__"):
             if len(velocity_km_s) != self.npoints:
-                raise ValueError("velocity_km_s must have the same size of the number of data (%d vs. %d). It could otherwise be a single float"%(len(velocity_km_s),self.npoints))
+                raise ValueError("velocity_km_s must have the same size of the number of data (%d vs. %d)."%(len(velocity_km_s),self.npoints)+\
+                                 " It could otherwise be a single float")
             else:
                 velocity_km_s = np.asarray(velocity_km_s)
 
@@ -271,16 +332,14 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     #  PLOTTER  #
     # --------- #
     
-
+    
     
     # =============== #
     #  Properties     #
     # =============== #
     @property
     def peculiar_velocity(self):
-        """ Peculiar velocity of galaxy added to the
-        magnitude errors
-        """
+        """ Peculiar velocity of galaxy to be added to the magnitude errors """
         if self._side_properties["pec_velocity"] is None:
             self.set_peculiar_velocity(None)
             
@@ -289,7 +348,7 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     # - Derived Properties
     @property
     def sndata(self):
-        """ This property is a dictionary containing all necessary data """
+        """ dictionary containing data for standardization """
         if self._derived_properties["sndata"] is None:
             self._derived_properties["sndata"] = {}
             self._derived_properties["sndata"]["zcmb"] = None
@@ -301,33 +360,33 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
     
     @property
     def systerror_redshift_doppler(self):
-        """ systematic magnitude error caused by errors or z and galaxy peculiar motion"""
+        """ systematic magnitude error caused by errors on redshift and galaxy peculiar motion """
         dmp = self.get("zcmb.err")**2 + (self.peculiar_velocity/CLIGHT_km_s)**2
         return  5/np.log(10) * np.sqrt(dmp)/self.get("zcmb")
     
 # ========================= #
 #                           #
-#     Hubblizer             #
+#     Hubblizer Model       #
 #                           #
 # ========================= #
-class ModelStandardization( BaseModel ):
-    """ Virtual Class To Handle Any Standardization """
-    STANDARDIZATION= []
-    # - created on the flight see __new__
-    #FREEPARAMETERS_STD = ["a%d"%(i+1) for i in range(len())]
-    #FREEPARAMETERS     = ["M0"]+FREEPARAMETERS_STD
 
+class ModelStandardization( BaseModel ):
+    """ Virtual Class able to handle any standardization
+    See the stadardization_model() function that returns
+    the model actually used (defining STANDARDIZATION)
+    """
+    STANDARDIZATION = []
+    # FREEPARAMETERS defined on the flight though __new__
     
     PROPERTIES         = ["cosmo","standard_coef"]
     SIDE_PROPERTIES    = ["sigma_int"]
     DERIVED_PROPERTIES = []
 
-    
     # ================ #
     #  Main Method     #
     # ================ #
     def __new__(cls,*arg,**kwarg):
-        """ Black Magic to allow Generalization of Models """
+        """ Black Magic allowing generalization of standardization models """
         
         cls.FREEPARAMETERS_STD = ["a%d"%(i+1) for i in range(len(cls.STANDARDIZATION))]
         cls.FREEPARAMETERS     = ["M0"]+cls.FREEPARAMETERS_STD
@@ -335,41 +394,36 @@ class ModelStandardization( BaseModel ):
         
     # -------------------- #
     #  Modefit Generic     #
-    # -------------------- #
-    def set_intrinsic(self, intrinsic_disp):
-        """ """
-        if intrinsic_disp<0:
-            raise ValueError("intrinsic_disp have to be positive or null")
-        self._side_properties["sigma_int"] = intrinsic_disp
-        
+    # -------------------- #        
     def setup(self, parameters):
         """ fill the standardization_coef property that will be used for the standardization """
         for name,v in zip(self.FREEPARAMETERS, parameters):
             self.standardization_coef[name] = v
 
     def get_model(self, z, corrections):
-        """ Get the magnitude that should be compared to the observed one:
-        example:
-           m_obs = 5*log10( D_L ) - alpha*(stretch-1) - beta*colour + scriptm
-           (beta will hence be negative)
-           return m_obs
-         """
+        """ the magnitude that should be compared to the observed one:
+        m_model = cosmology's distance-modulus + M_0 + standardization
+        
+        Returns
+        -------
+        Array (m_model)
+        """
         # -- correction alpha*stretch + beta*color
         if corrections is None:
             mcorr = 0
         else:
             mcorr = np.sum([ self.standardization_coef[alpha]*coef
-                            for alpha,coef in zip(self.FREEPARAMETERS_STD,corrections)],
+                            for alpha,coef in zip(self.FREEPARAMETERS_STD, corrections)],
                             axis=0)
             
         # - model
         return self.cosmo.distmod(z).value + self.standardization_coef["M0"] + mcorr
-
         
     def get_loglikelihood(self, z, mag, corrections, covmatrix, parameters=None):
         """ The loglikelihood (-0.5*chi2) of the data given the model
 
         for N data with M correction (i.e. if x_1 and c standardization, M=2 )
+        
         Parameters
         ----------
         z, mag: [N-array,N-array]
@@ -398,7 +452,7 @@ class ModelStandardization( BaseModel ):
         return -0.5 * np.sum(res**2 / self.get_variance(covmatrix) )
 
     def lnprior(self,parameter):
-        """ so far a flat prior """
+        """ flat prior """
         for name_param,p in zip(self.FREEPARAMETERS, parameter):
             if "sigma" in name_param and p<0:
                 return -np.inf
@@ -407,21 +461,35 @@ class ModelStandardization( BaseModel ):
     # -------------------- #
     #  Model Special       #
     # -------------------- #
+    def set_intrinsic(self, intrinsic_disp):
+        """ defines the intrinsic dispersion of the model.
+        The intrinsic dispersion is added in quadrature to the variance,
+        which is estimated from the covariance matrix.
+        
+        Returns
+        -------
+        Void
+        """
+        if intrinsic_disp<0:
+            raise ValueError("intrinsic_disp have to be positive or null")
+        
+        self._side_properties["sigma_int"] = intrinsic_disp
+
     def get_variance(self, covmatrix):
-        """ This return the variance associated to the given covariance matrix
-        taken into account the current alpha, beta etc parameters. It also includes
-        the intrinsic dispersion if "sigma_int" indeed is a one of the free parameter
+        """ returns the variance estimated from the covariance matrix.
+        
+        It takes into account the current standardization coef. (alpha, beta etc).
+        It also includes the model intrinsic dispersion added in quadrature.
+        
         Returns
         -------
         array (variances)
         """
-        #return 1.
         a_ = np.matrix(np.concatenate([[1.0],[self.standardization_coef[k]
                                       for k in self.FREEPARAMETERS_STD]]))
         
         return np.array([np.dot(a_, np.dot(c, a_.T)).sum() for c in covmatrix]) +\
           self.intrinsic_dispersion**2 
-
 
     def set_cosmo(self, cosmo):
         """ """
@@ -435,13 +503,14 @@ class ModelStandardization( BaseModel ):
     # =============== #
     @property
     def intrinsic_dispersion(self):
+        """ Intrinsic dispersion added in quadrature to the variance. """
         if self._side_properties["sigma_int"] is None:
             self.set_intrinsic(0)
         return self._side_properties["sigma_int"]
     
     @property
     def standardization_coef(self):
-        """ """
+        """ dictionary containing the names and value of the standardization parameters """
         if self._properties["standard_coef"] is None:
             self._properties["standard_coef"] = {}
         return self._properties["standard_coef"]

@@ -679,7 +679,6 @@ class BaseFitter( BaseObject ):
 
         Parameters:
         -----------
-        
         use_minuit: [bool/None]
             If None, this will use the object's current *use_minuit* value.
             If bool, this will set the technique used to fit the *model*
@@ -933,7 +932,7 @@ class BaseFitter( BaseObject ):
     # ------------------- #
     # - Bayes & MCMC    - #
     # ------------------- #
-    def run_mcmc(self,nrun=2000, walkers_per_dof=3,
+    def run_mcmc(self,nrun=2000, walkers_per_dof=4,
                  init=None, init_err=None, verbose=True):
         """ run mcmc from the emcee python code. This might take time
 
@@ -959,7 +958,7 @@ class BaseFitter( BaseObject ):
         # - And run it
         self.mcmc.run()
         
-    def setup_mcmc(self, nrun=2000, walkers_per_dof=3,
+    def setup_mcmc(self, nrun=2000, walkers_per_dof=4,
                  init=None, init_err=None, verbose=True):
         """ Setup the basic property for the mcmc to run, you just need to say self.mcmc.run()
             to run it. See also self.run_mcmc()
