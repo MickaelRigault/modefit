@@ -183,13 +183,13 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
             use_minuit=None, kfold=None, nsamples=1000,**kwargs):
         """ fit the data on the model
 
-        *Important* minuit fit require a chi2/dof to estimate the errors.
+        *Important* minuit fit requires a chi2/dof=1 for accurate error estimate.
         
         Parameters:
         -----------
         intrinsic: [float/array] -optional-
             Intrinsic dispersion added in quadrature to the variances of the
-            datapoint (estimated from the covariance matrix).
+            datapoint (estimated through the covariance matrix).
 
         verbose: [bool] -optional-
             Have printed information about the fit (chi2 and intrinsic dispersion )
