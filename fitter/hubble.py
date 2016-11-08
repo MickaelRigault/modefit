@@ -85,7 +85,7 @@ def stadardization_model(corr):
 ###############################
 class HubbleFit( BaseFitter, DataSourceHandler ):
     """ """
-    PROPERTIES         = ["model",]
+    PROPERTIES         = ["model"]
     SIDE_PROPERTIES    = ["pec_velocity"]
     DERIVED_PROPERTIES = ["sndata"]
 
