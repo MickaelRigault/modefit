@@ -1,27 +1,34 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" This low level module manages the scipy / minuit variation """
+""" Low level module to manage the scipy/minuit code variations """
 
-import numpy as np
 import warnings
+import numpy as np
 
+# - astrobject dependencies
 from astrobject import BaseObject
 from astrobject.utils.decorators import make_method
 
 try:
     from iminuit import Minuit
     _HASMINUIT = True
+    
 except ImportError:
     warnings.warn("iminuit not accessible. You won't be able to use minuit functions", ImportError)
     _HASMINUIT = False
 
     
+###################################
+#                                 #
+#   Markov Chain Monte Carlo      #
+#                                 #
+###################################
 
 class MCMC( BaseObject ):
     """ Class Gathering the MCMC run output. Based on emcee """
     
-    # BaseObject global variables
+
     PROPERTIES         = ["lnprob","freeparameters","runprop",
                           "burnin","properties"]
     SIDE_PROPERTIES    = ["boundaries_poswalkers"]
@@ -103,6 +110,7 @@ class MCMC( BaseObject ):
         
         if verbose:
             print "-> MCMC sampler.run_mcmc() done"
+            
     # ------------ #
     # - SETTER   - #
     # ------------ #
@@ -300,6 +308,7 @@ class MCMC( BaseObject ):
     # ========================= #
     #   Properties              #
     # ========================= #
+    
     @property
     def data(self):
         """ dictionary containing the basic mcmc information """
@@ -307,8 +316,9 @@ class MCMC( BaseObject ):
                 "freeparameters":self.freeparameters,
                 "burnin":        self.burnin,
                 "guess":         self.guess}
-    # -----------
-    # MCMC base
+    
+    #  MCMC base
+    # --------------------
     @property
     def freeparameters(self):
         """ names of the parameters of the model (see lnprob) """
@@ -330,7 +340,7 @@ class MCMC( BaseObject ):
         return self._properties["properties"]
 
     def is_setup(self):
-        """ Check if you defined all the run properties """
+        """ Check if properties needed to run the mcmc has been defined """
         for k in self.RUN_PROPERTIES:
             if self.properties[k] is None:
                 return False
@@ -342,8 +352,8 @@ class MCMC( BaseObject ):
         Bayesian framework."""
         return self._properties["lnprob"]
 
-    # ------------------
-    # - MCMC properties
+    #   MCMC properties
+    # --------------------
     @property
     def nrun(self):
         """ number of run for the mcmc"""
@@ -406,8 +416,8 @@ class MCMC( BaseObject ):
         """ Number of walk below which the walker did not converged. """
         return self._properties["burnin"]
     
+    #  Derived Properties
     # --------------------
-    # - Derived Properties
     @property
     def sampler(self):
         """ the emcee mcmc sampler """
@@ -462,11 +472,20 @@ class MCMC( BaseObject ):
             
         return fitout
 
-
-
+###################################
+#                                 #
+#   Data Management Classes       #
+#                                 #
+###################################
+# ================ #
+#                  #
+#  K-Folding       #
+#                  #
+# ================ #
 class _KFolder_( BaseObject ):
-    """ Virtual class To be packed with DataHandlers-like ones.
-    This Virtual class enables to easily deal with K-folding
+    """ Virtual class to be packed inherited by DataHandlers-like ones.
+    
+    This Virtual class enables to deal with K-folding tools
     """
     PROPERTIES         = []
     SIDE_PROPERTIES    = ["used_indexes"]
@@ -514,9 +533,6 @@ class _KFolder_( BaseObject ):
     # ==================== #
     #    Properties        #
     # ==================== #
-    # ------------ #
-    #   Folding    #
-    # ------------ #
     @property
     def used_indexes(self):
         """ Indexes of the data used for the fitting """
@@ -546,7 +562,12 @@ class _KFolder_( BaseObject ):
             
         return self._derived_properties["fold_indexes"]
 
-    
+# ================ #
+#                  #
+#  Data Handlers   #
+#                  #
+# ================ #
+
 class DataHandler( _KFolder_):
     """ """
     PROPERTIES         = ["data","error"]
@@ -646,14 +667,17 @@ class DataSourceHandler( _KFolder_ ):
     def npoints(self):
         """ number of points in data """
         return len(self._orig_names)
+
+
     
-# ========================================== #
-#                                            #
-#  Use the Scipy-Minuit Tricks               #
-#                                            #
-# ========================================== #
+###################################
+#                                 #
+#   Basic Fitter Object           #
+#                                 #
+###################################
+
 class BaseFitter( BaseObject ):
-    """ Mother class for the fitters """
+    """ Mother class of the fitters """
 
     PROPERTIES         = ["param_input","model","use_minuit"]
     SIDE_PROPERTIES    = ["kfold", "nfold"]
@@ -1269,17 +1293,19 @@ class BaseFitter( BaseObject ):
         """ manages the fixed values and how the parametrisation is made """
         self._paramguess_scipy, self._parambounds_scipy = \
           self.model._parameter2scipyparameter_(self.paramguess,self.parambounds)
-    
-# ========================================== #
-#                                            #
-# = Play with Scipy and Minuit Similarly   = #
-#                                            #
-# ========================================== #
-class BaseModel( BaseObject ):
-    """ Modeling that are able to manage minuit or scipy inputs"""
 
-    PROPERTIES = ["freeparameters"]
-    SIDE_PROPERTIES = ["param_input"]
+
+###################################
+#                                 #
+#   Basic Model Object            #
+#                                 #
+###################################
+
+class BaseModel( BaseObject ):
+    """ Mother class of the Models """
+
+    PROPERTIES         = ["freeparameters"]
+    SIDE_PROPERTIES    = ["param_input"]
     DERIVED_PROPERTIES = []
     
     # =================== #
@@ -1377,8 +1403,8 @@ class BaseModel( BaseObject ):
     def nparam(self):
         return len(self.freeparameters)
     
+    #   Parameters Values
     # -----------------------
-    # - Parameters Values
     @property
     def param_input(self):
         """ dictionary containing the input parameter values:
@@ -1436,7 +1462,8 @@ class BaseModel( BaseObject ):
         return hess
 
     # -------------------
-    # - Scipy
+    #   Scipy
+    # -------------------
     # shaped like a minuit 
     def _scipy_chi2_(self,parameter):
         """
