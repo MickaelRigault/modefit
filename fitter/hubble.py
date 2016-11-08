@@ -303,7 +303,7 @@ class HubbleFit( BaseFitter, DataSourceHandler ):
         if add_zerror:    
             self.add_to_covmatrix(covmat, self.systerror_redshift_doppler**2)
         if add_zerror:
-            self.add_to_covmatrix(covmat, 0.055*self.get("zcmb"))
+            self.add_to_covmatrix(covmat, (0.055*self.get("zcmb"))**2)
                 
         self.sndata["covmatrix"] = covmat
 
