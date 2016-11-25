@@ -1,7 +1,18 @@
 # modefit
 
-API to fit basic functions thought your data. The core of the module is to be able to transparently use scipy or minuit are following the same rules: set boundaries, give guesses, or even fix any paramters of your model.
+Fit your data !
 
+The concept of this API is to be able to fit your data using minuit or scipy as will as to run Markov Chain Mote Carlo 
+using the same object. 
+
+Once a fitter object is loaded: (see below) simply:
+   - use `fit()` to fit the data. See the results in `fitvalues`
+   - use `run_mcmc()` to run the markov chain monte carlo. Best values in `mcmc.derived_values`
+   
+The fitter objects also have a `show()` method in which you can choose to show the best fit or the mcmc samples on top on the data.
+
+
+### Current Models
 Currently, the following models are implemented:
 * **binormal step** (`stepfit`). It has 4 parameters: mean_a, mean_b, sigma_a, sigma_b, which are the mean and the dispersion (sigma) of the normal distributions a and b, respectively. Each datapoint can have a probability `proba` (1-`proba`) to belong to the group "a"  ("b"). 
 
@@ -14,3 +25,4 @@ It includes covariance (if given) between the standardization paramaters (i.e. b
 
 * iminuit (>1.1)
 * astrobject (>=0.4)
+* emcee (>=2.0)
