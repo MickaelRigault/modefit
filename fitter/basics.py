@@ -8,6 +8,8 @@ from scipy.special import orthogonal
 
 from .baseobjects import BaseModel, BaseFitter, DataHandler
 
+__all__ = ["get_polyfit"]
+
 
 def get_polyfit(x, y, dy, degree,
                 legendre=False, **kwargs):
