@@ -19,7 +19,7 @@ Currently, the following models are implemented:
 * **Hubblizer** (`get_hubblefit`). Fit the SN standardization around the Hubble diagram (no cosmology fit). This code allows us you to use any parameter to standardize the SN magnitude.
 It includes covariance (if given) between the standardization paramaters (i.e. between x1 and c in the `SALT2` framework). In addition, an iterative process enables to retrieve the intrinsic dispersion of the SN magnitude.
 
-* **PolynomeFit** (`get_polyfit`). Fit any degree polynome (legendre or simple) to you dataset (x, y, dy).
+* **PolynomeFit** (`get_polyfit`). Fit any degree polynome (legendre or simple) to your dataset (x, y, dy).
 
 ## Dependencies
 
