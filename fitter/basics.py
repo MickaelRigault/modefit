@@ -79,12 +79,13 @@ class PolynomeFit( BaseFitter, DataHandler ):
 
 
     def show(self, savefile=None, show=True, ax=None,
-             mcmc=False, nsample=100, mlw=2,
-             color="0.7", modelcolor= "k", modellw=2, mcmccolor = None,
+             show_model=True,
+             mcmc=False, nsample=100, mlw=2, ecolor="0.3",
+             mcmccolor=None, modelcolor= "k", modellw=2, 
              **kwargs):
         """ """
         import matplotlib.pyplot as mpl 
-        from astrobject.utils.mpladdon import figout
+        from astrobject.utils.mpladdon import figout, errorscatter
         from astrobject.utils.tools    import kwargs_update
         self._plot = {}
         if ax is None:
@@ -97,16 +98,35 @@ class PolynomeFit( BaseFitter, DataHandler ):
         
         # - Basics
         prop = kwargs_update( dict(ms=15, mfc=mpl.cm.Blues(0.6,0.5), mec=mpl.cm.Blues(0.8,0.9),
-                                   ls="None",mew=1.5, marker="o"), **kwargs)
+                                   ls="None",mew=1.5, marker="o", zorder=5), **kwargs)
         
         pl = ax.plot(self.xdata,self.data, **prop)
-        xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
-        if not mcmc:
-            model = ax.plot(xx,self.get_model(xx), ls="-", lw=modellw,
-                            color=modelcolor, scalex=False, scaley=False)
-        else:
-            print "MCMC lines not done yet"
+        er = ax.errorscatter(self.xdata,self.data, dy=self.errors, zorder=prop["zorder"]-1,
+                             ecolor=ecolor)
+        # - Model
+        if show_model:
+            xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
             
+            if not mcmc:
+                model = ax.plot(xx,self.model.get_model(xx), ls="-", lw=modellw,
+                                color=modelcolor, scalex=False, scaley=False, zorder=np.max([prop["zorder"]-2,1]))
+                
+            elif not self.has_mcmc():
+                warnings.warn("No MCMC loaded. use run_mcmc()")
+                model = []
+            else:
+                if mcmccolor is None:
+                    mcmccolor = mpl.cm.binary(0.6,0.3)
+                model = [ax.plot(xx,self.model.get_model(xx, param=param), color=mcmccolor,
+                                scalex=False, scaley=False, zorder=np.max([prop["zorder"]-3,1]))
+                        for param in self.mcmc.samples[np.random.randint(len(self.mcmc.samples), size=nsample)]]
+                
+                model.append(ax.plot(xx,self.model.get_model(xx, param=np.asarray(self.mcmc.derived_values).T[0]), 
+                                        ls="-", lw=modellw, color=modelcolor,
+                                        scalex=False, scaley=False, zorder=np.max([prop["zorder"]-2,1])))
+                
+        else:
+            model = []
         # ---------
         # - Limits
         # ------
@@ -177,7 +197,7 @@ class PolyModel( BaseModel ):
         self._properties["parameters"] = np.asarray(parameters)
 
         
-    def get_model(self, x, reshapex=True):
+    def get_model(self, x, reshapex=True, param=None):
         """ return the model for the given data.
         The modelization is based on legendre polynomes that expect x to be between -1 and 1.
         This will create a reshaped copy of x to scale it between -1 and 1 but
@@ -187,6 +207,9 @@ class PolyModel( BaseModel ):
         -------
         array (size of x)
         """
+        if param is not None:
+            self.setup(param)
+            
         if self.use_legendre:
             if reshapex:
                 x = (x-x.min())/(x.max()-x.min()) *2 -1
