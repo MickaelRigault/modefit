@@ -76,7 +76,7 @@ class MCMC( BaseObject ):
     # ========================= #
     #   Main Methods            #
     # ========================= #
-    def run(self,verbose=True,**kwargs):
+    def run(self, verbose=True,**kwargs):
             
         """ run the mcmc. This method could take time
         (running method based on emcee)
@@ -977,11 +977,11 @@ class BaseFitter( BaseObject ):
         # -------------
         # - Load MCMC
         self.setup_mcmc(nrun=nrun, walkers_per_dof=walkers_per_dof,
-                        init=init, init_err=init_err, verbose=verbose)
+                        init=init, init_err=init_err)
         
         # -------------
         # - And run it
-        self.mcmc.run()
+        self.mcmc.run(verbose=verbose)
         
     def setup_mcmc(self, nrun=2000, walkers_per_dof=4,
                  init=None, init_err=None, verbose=True):

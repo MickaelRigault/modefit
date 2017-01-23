@@ -69,7 +69,7 @@ for i,l in enumerate(LINENAMES):
 
 def linefit(filename,modelname="Mains", **kwargs):
     """ """
-    return LinesFitter(filename, modelname="Mains",**kwargs)
+    return LinesFitter(filename, modelname=modelname,**kwargs)
 
 
 # ============================ #
@@ -224,6 +224,13 @@ class LinesFitter( Spectrum, BaseFitter ):
         if self.has_var:
             self._derived_properties['vfit'] = self.v/self.norm**2
 
+    @_autogen_docstring_inheritance(BaseFitter.fit,"BaseFitter.fit")
+    def fit(self,*args,**kwargs):
+
+        if "velocity_guess" in kwargs:
+            self._derived_properties['lbdamask'] = None
+        super(LinesFitter, self).fit(*args,**kwargs)
+    
     @_autogen_docstring_inheritance(BaseFitter.set_model,"BaseFitter.set_model")
     def set_model(self,*args,**kwargs):
         # doc from BaseFitter

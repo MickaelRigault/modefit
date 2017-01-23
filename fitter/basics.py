@@ -5,10 +5,10 @@
 
 import numpy as np
 from scipy.special import orthogonal
-
+from scipy import stats
 from .baseobjects import BaseModel, BaseFitter, DataHandler
 
-__all__ = ["get_polyfit"]
+__all__ = ["get_polyfit", "get_normpolyfit"]
 
 
 def get_polyfit(x, y, dy, degree,
@@ -40,6 +40,38 @@ def get_polyfit(x, y, dy, degree,
                        legendre=legendre,
                         **kwargs)
 
+def get_normpolyfit(x, y, dy, degree, ngauss,
+                legendre=False, **kwargs):
+    """ Get the object to fit a `degree`th order polynomes 
+    with `ngauss` gaussian on top of it.
+
+    Parameters
+    ----------
+    x, y, dy: [arrays]
+       data to be fitted. Remark that the errors on the fit parameters
+       are accurate only if the chi2/dof ~ 1
+
+    ngauss: [int] 
+        Number of gaussian to add. Each has 3 degrees of freedom (mean, sigma, amplitude)
+
+    degree: [int]
+        The degree of the polynome used for model:
+        - 1 means horizontal line (b)
+        - 2 means slope (ax + b if not legendre)
+        - 3 etc.
+
+    legendre: [bool] -optional-
+        Shall the model be based on Legendre polynomial or
+        simple polynomal (ax+bx**2 + cx**3 etc.)
+
+    Returns
+    -------
+    PolynomeFit
+    """
+    return NormPolynomeFit(np.asarray(x), np.asarray(y),
+                       np.asarray(dy), degree, ngauss,
+                       legendre=legendre,
+                        **kwargs)
 
 ####################################
 #                                  #
@@ -81,7 +113,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
 
 
     def show(self, savefile=None, show=True, ax=None,
-             show_model=True,
+             show_model=True, xrange=None,
              mcmc=False, nsample=100, mlw=2, ecolor="0.3",
              mcmccolor=None, modelcolor= "k", modellw=2, 
              **kwargs):
@@ -99,7 +131,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
             fig = ax.figure
         
         # - Basics
-        prop = kwargs_update( dict(ms=15, mfc=mpl.cm.Blues(0.6,0.5), mec=mpl.cm.Blues(0.8,0.9),
+        prop = kwargs_update( dict(ms=15, mfc=mpl.cm.Blues(0.6,0.9), mec=mpl.cm.Blues(0.8,0.9),
                                    ls="None",mew=1.5, marker="o", zorder=5), **kwargs)
         
         pl = ax.plot(self.xdata,self.data, **prop)
@@ -107,7 +139,10 @@ class PolynomeFit( BaseFitter, DataHandler ):
                              ecolor=ecolor)
         # - Model
         if show_model:
-            xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
+            if xrange is None:
+                xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
+            else:
+                xx = np.linspace(xrange[0],xrange[1], 1000)
             
             if not mcmc:
                 model = ax.plot(xx,self.model.get_model(xx), ls="-", lw=modellw,
@@ -152,7 +187,15 @@ class PolynomeFit( BaseFitter, DataHandler ):
         return self._derived_properties["xscaled"]
     
 
-
+class NormPolynomeFit( PolynomeFit ):
+    """ """
+    def __init__(self, x, y, dy, degree, ngauss,
+                 names=None, legendre=True):
+        """ """
+        self.set_data(x, y, dy)
+        self.set_model(normal_and_polynomial_model(degree, ngauss),
+                           use_legendre=legendre)
+        
 ############################
 #                          #
 # Model Legendre Polynome  #
@@ -253,3 +296,68 @@ class PolyModel( BaseModel ):
     @use_legendre.setter
     def use_legendre(self, uselegendre):
         self._side_properties["legendre"] = bool(uselegendre)
+
+        
+###############################
+#                             #
+# Model Continuum + Gaussian  #
+#                             #
+###############################
+def normal_and_polynomial_model(degree, ngauss):
+    """ 
+    Build a model with a continuum that has a `degree` polynomial continuum
+    and `ngauss` on top of it.
+    
+    Returns
+    -------
+    Child of NormPolyModel
+    """
+    class N_NormPolyModel( NormPolyModel ):
+        DEGREE = degree
+        NGAUSS = ngauss
+        
+    return N_NormPolyModel()
+
+
+class NormPolyModel( PolyModel ):
+    DEGREE = 0
+    NGAUSS = 0
+
+    PROPERTIES = ["normparameters"]
+    
+    def __new__(cls,*arg,**kwarg):
+        """ Black Magic allowing generalization of Polynomial models """
+        
+        cls.FREEPARAMETERS = ["a%d"%(i) for i in range(cls.DEGREE)] + \
+          ["mu%d"%(i) for i in range(cls.NGAUSS)]  + ["sig%d"%(i) for i in range(cls.NGAUSS)]+ ["ampl%d"%(i) for i in range(cls.NGAUSS)]
+        print cls.FREEPARAMETERS
+        
+        return super(PolyModel,cls).__new__(cls)
+
+    def setup(self, parameters):
+        """ read and parse the parameters """
+        # good strategy to have 2 names to easily super() the continuum in get_model
+        self._properties["parameters"]     = np.asarray(parameters[:self.DEGREE])
+        self._properties["normparameters"] = np.asarray(parameters[self.DEGREE:])
+        
+    def get_model(self, x, reshapex=True, param=None):
+        """ return the model for the given data.
+        The modelization is based on legendre polynomes that expect x to be between -1 and 1.
+        This will create a reshaped copy of x to scale it between -1 and 1 but
+        if x is already as such, save time by setting reshapex to False
+
+        Returns
+        -------
+        array (size of x)
+        """
+        if param is not None:
+            self.setup(param)
+        continuum = super(NormPolyModel, self).get_model(x, reshapex=reshapex, param=None)
+        return continuum + np.sum([stats.norm.pdf(x, loc=self.normparameters[0+i*3],
+                                                scale=self.normparameters[1+i*3])*self.normparameters[2+i*3]
+                            for i in range(self.NGAUSS)], axis=0)
+
+
+    @property
+    def normparameters(self):
+        return self._properties["normparameters"]
