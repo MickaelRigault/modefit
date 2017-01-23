@@ -21,6 +21,8 @@ It includes covariance (if given) between the standardization paramaters (i.e. b
 
 * **PolynomeFit** (`get_polyfit`). Fit any degree polynome (legendre or simple) to your dataset (x, y, dy).
 
+* **NormPolynomeFit** (`get_normpolyfit`). Fit any number of gaussian on top of a polynome of any degree (legendre or simple) to your dataset (x, y, dy). 
+
 ## Dependencies
 
 * iminuit (>1.1)
