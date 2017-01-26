@@ -8,7 +8,7 @@ from scipy          import stats
 import matplotlib.pyplot as mpl
 import warnings
 # - local dependencies
-from astrobject.utils.tools import kwargs_update
+from .utils import kwargs_update
 from .baseobjects import BaseModel,BaseFitter, DataHandler
 from .unimodal import normal
 

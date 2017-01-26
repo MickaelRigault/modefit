@@ -7,8 +7,8 @@ import warnings
 import numpy as np
 
 # - astrobject dependencies
-from astrobject import BaseObject
-from astrobject.utils.decorators import make_method
+from propobject import BaseObject
+from .utils import make_method
 
 try:
     from iminuit import Minuit

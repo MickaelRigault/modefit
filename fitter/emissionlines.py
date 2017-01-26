@@ -17,7 +17,7 @@ from .baseobjects import BaseModel,BaseFitter
 from astrobject.spectroscopy import Spectrum
 
 # - to be removed
-from astrobject.utils.decorators import _autogen_docstring_inheritance
+from .utils import _autogen_docstring_inheritance
 
 
 
