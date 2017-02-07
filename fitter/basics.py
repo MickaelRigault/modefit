@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """ Basic Filters """
-
+import warnings
 import numpy as np
 from scipy.special import orthogonal
 from scipy import stats
@@ -138,7 +138,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
         er = ax.errorscatter(self.xdata,self.data, dy=self.errors, zorder=prop["zorder"]-1,
                              ecolor=ecolor)
         # - Model
-        if show_model:
+        if show_model and self.has_fit_run(): 
             if xrange is None:
                 xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
             else:
@@ -195,7 +195,41 @@ class NormPolynomeFit( PolynomeFit ):
         self.set_data(x, y, dy)
         self.set_model(normal_and_polynomial_model(degree, ngauss),
                            use_legendre=legendre)
+
+    def show(self,savefile=None, show=True, ax=None, show_model=True, xrange=None,
+                 show_gaussian=False,
+                 mcmc=False, nsample=100, mlw=2, ecolor='0.3',
+                 mcmccolor=None, modelcolor='k', modellw=2, **kwargs):
+        """ """
+        import matplotlib.pyplot as mpl 
+        from astrobject.utils.mpladdon import figout, errorscatter
+        from astrobject.utils.tools    import kwargs_update
+
+        pkwargs = kwargs_update(dict(ls="-", marker="None"),**kwargs)
         
+        pl = super(NormPolynomeFit, self).show(savefile=None, show=False, ax=ax,
+                                          show_model=show_model, xrange=xrange,
+                                          mcmc=mcmc, nsample=nsample, mlw=mlw,
+                                          ecolor=ecolor,
+                                          mcmccolor=mcmccolor, modelcolor=modelcolor,
+                                          modellw=modellw, **pkwargs)
+        
+        # -- Add individual gaussian
+        if show_gaussian:
+            if xrange is None:
+                xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
+            else:
+                xx = np.linspace(xrange[0],xrange[1], 1000)
+            
+            cont = self.model._get_continuum_(xx, True)
+            [pl["ax"].plot(xx,self.model.get_ith_gaussian(xx,i, add_continuum=False)+cont,
+                               ls="-", lw=modellw/2.,alpha=0.5,
+                               color=modelcolor, scalex=False, scaley=False, zorder=np.max([pl["prop"]["zorder"]-1,1]))
+                               
+            for i in range(self.model.NGAUSS)]
+
+        pl["figure"].figout(savefile=savefile, show=show)
+        return pl
 ############################
 #                          #
 # Model Legendre Polynome  #
@@ -339,7 +373,17 @@ class NormPolyModel( PolyModel ):
         # good strategy to have 2 names to easily super() the continuum in get_model
         self._properties["parameters"]     = np.asarray(parameters[:self.DEGREE])
         self._properties["normparameters"] = np.asarray(parameters[self.DEGREE:])
-        
+
+
+    def get_ith_gaussian(self, x, ithgauss, add_continuum=False, param=None):
+        """ """
+        if param is not None:
+           self.setup(param)
+        cont = 0 if not add_continuum else self._get_continuum_(x, reshapex=True)
+        return stats.norm.pdf(x, loc=self.normparameters[ithgauss::self.NGAUSS][0],
+                            scale=self.normparameters[ithgauss::self.NGAUSS][1])*self.normparameters[ithgauss::self.NGAUSS][2] + cont
+
+    
     def get_model(self, x, reshapex=True, param=None):
         """ return the model for the given data.
         The modelization is based on legendre polynomes that expect x to be between -1 and 1.
@@ -352,12 +396,17 @@ class NormPolyModel( PolyModel ):
         """
         if param is not None:
             self.setup(param)
-        continuum = super(NormPolyModel, self).get_model(x, reshapex=reshapex, param=None)
-        return continuum + np.sum([stats.norm.pdf(x, loc=self.normparameters[0+i*3],
-                                                scale=self.normparameters[1+i*3])*self.normparameters[2+i*3]
+
+        continuum = self._get_continuum_(x, reshapex=reshapex)
+        
+        return continuum + np.sum([stats.norm.pdf(x, loc=self.normparameters[i::self.NGAUSS][0],
+                                                scale=self.normparameters[i::self.NGAUSS][1])*self.normparameters[i::self.NGAUSS][2]
                             for i in range(self.NGAUSS)], axis=0)
 
-
+    def _get_continuum_(self,x, reshapex):
+        """ """
+        return super(NormPolyModel, self).get_model(x, reshapex=reshapex, param=None)
+    
     @property
     def normparameters(self):
         return self._properties["normparameters"]
