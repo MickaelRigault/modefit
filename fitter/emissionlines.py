@@ -264,7 +264,8 @@ class LinesFitter( Spectrum, BaseFitter ):
     def show(self, savefile=None, show=True, ax=None,
              mcmc=False, nsample=100,
              variance_onzero=True, add_thumbnails=False,
-             color="0.7", fitcolor= None, mcmccolor = None,
+             color="0.7", fitcolor= None,
+             mcmccolor = None, mcmclw=1,
              **kwargs):
         """ display the data vs. the model
 
@@ -311,7 +312,7 @@ class LinesFitter( Spectrum, BaseFitter ):
         if mcmc:
             plmodel = self.display_mcmc_models(ax, nsample,
                                                basecolor = mcmccolor,
-                                               **prop)
+                                               baselw=mcmclw, **prop)
         else:
             plmodel = self.display_model(ax,self._fitparams, **prop) \
               if self.has_fit_run() else None
@@ -329,8 +330,8 @@ class LinesFitter( Spectrum, BaseFitter ):
         fig.figout(savefile=savefile,show=show,add_thumbnails=add_thumbnails)        
         return self._plot
   
-    def show_mains(self,savefile=None, wavelength_window=100,
-                   mcmc=False,**kwargs):
+    def show_mains(self,savefile=None, wavelength_window=110,
+                   mcmc=False, colorflag=False, **kwargs):
         """Zoom On Halpha NII + OII1,2 regions. See self.show for more details"""
         
         from astrobject.utils.mpladdon import figout
@@ -357,9 +358,9 @@ class LinesFitter( Spectrum, BaseFitter ):
         # ------------------- #
         # - Setting         - #
         # ------------------- #
-        fig   = mpl.figure(figsize=[10,6])
-        axHa  = fig.add_axes([0.52,0.15,0.4,0.78])
-        axOII = fig.add_axes([0.10,0.15, 0.4,0.78])
+        fig   = mpl.figure(figsize=[14,5])
+        axHa  = fig.add_axes([0.55,0.15,0.37,0.78])
+        axOII = fig.add_axes([0.10,0.15, 0.37,0.78])
         detHa = fout["HA"]/fout["HA.err"][0]
         colorInfo = {
             "good":mpl.cm.Greens(0.8),
@@ -371,9 +372,9 @@ class LinesFitter( Spectrum, BaseFitter ):
         if detHa < 2:
             signal = "nothing"
         else:
-            if detHa<3:
+            if detHa<4:
                 signal = "maybe"
-            elif detHa < 5:
+            elif detHa < 6:
                 signal = "probably"
             else:
                 signal = "good"
@@ -381,24 +382,27 @@ class LinesFitter( Spectrum, BaseFitter ):
         # -------------------#
         #  Do The Plot       #
         # -------------------#
+        color = mpl.cm.Blues(0.8) if not colorflag else colorInfo[signal]
+        mcmccolor = np.asarray(color).copy()
+        mcmccolor[-1] /= 15.
         self.show(savefile="_dont_show_",
-                    ax=axHa, fitcolor=colorInfo[signal],
-                    mcmc= mcmc, **kwargs)
+                    ax=axHa, fitcolor=color,
+                    mcmc= mcmc,mcmccolor=mcmccolor, **kwargs)
         self.show(savefile="_dont_show_",
-                    ax=axOII,fitcolor=colorInfo[signal],
-                    mcmc= mcmc, **kwargs)
+                    ax=axOII,fitcolor=color,
+                    mcmc= mcmc,mcmccolor=mcmccolor, **kwargs)
     
-        axHa.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
-                    ["Detection = "+"{:.1f} ".format(detHa)+signal], 
-                    handlelength=0, borderaxespad=0., loc="upper right",
-                    frameon=False, labelspacing=2, fontsize="large"
-            )
-        axOII.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
-                ["OII = "+"{:.1f}".format((fout["OII1"]+fout["OII2"])/\
-                            np.sqrt(fout["OII1.err"][0]**2+fout["OII2.err"][0]**2))], 
-                handlelength=0, borderaxespad=0., loc="upper left", frameon=False,
-                labelspacing=2, fontsize="large"
-            )
+        #axHa.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
+        #            ["Detection = "+"{:.1f} ".format(detHa)+signal], 
+        #            handlelength=0, borderaxespad=0., loc="upper right",
+        #            frameon=False, labelspacing=2, fontsize="large"
+        #    )
+        #axOII.legend([Rectangle((0, 0), 0, 0, alpha=0.0)], 
+        #        ["OII = "+"{:.1f}".format((fout["OII1"]+fout["OII2"])/\
+        #                    np.sqrt(fout["OII1.err"][0]**2+fout["OII2.err"][0]**2))], 
+        #        handlelength=0, borderaxespad=0., loc="upper left", frameon=False,
+        #        labelspacing=2, fontsize="large"
+        #    )
     
         # -------------------- #
         # - Shape it         - #
@@ -435,7 +439,7 @@ class LinesFitter( Spectrum, BaseFitter ):
     #   Plot Add on      #
     # ------------------ #
     def display_mcmc_models(self,ax, nsample, color=None,
-                            basecolor=None, alphasample=0.07,**kwargs):
+                            basecolor=None, alphasample=0.07, baselw=1, **kwargs):
         """ add mcmc model reconstruction to the plot
 
         Parameters:
@@ -465,17 +469,17 @@ class LinesFitter( Spectrum, BaseFitter ):
             color     = mpl.cm.Blues(0.8,1)
         if basecolor is None:
             basecolor = mpl.cm.Blues(0.5,0.1)
-        
-        pl = [self.display_model(ax, param, color=basecolor,**kwargs)
+        lw = kwargs.pop("lw",2)
+        pl = [self.display_model(ax, param, color=basecolor, lw=baselw, **kwargs)
               for param in self.mcmc.samples[np.random.randint(len(self.mcmc.samples), size=100)] ]
         
         self.display_model(ax, np.asarray(self.mcmc.derived_values).T[0],
-                           color=color, **kwargs)
+                           color=color, lw=lw, **kwargs)
         
         return pl
     
     def display_model(self,ax,parameters,
-                      color="r", ls="-",**kwargs):
+                      color="r", ls="-", lw=1, **kwargs):
         """ add the model on the plot
         Parameters
         ----------
@@ -491,7 +495,7 @@ class LinesFitter( Spectrum, BaseFitter ):
         ymodel = self.get_model(parameters)
         ymodel[~self.model.lbdamask] = np.NaN
         return ax.plot(self.model.lbda,ymodel,
-                       color=color,ls=ls,
+                       color=color,ls=ls,lw=lw,
                        **kwargs)
     # ====================== #
     # = Properties         = #

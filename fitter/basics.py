@@ -90,6 +90,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
         """ """
         self.set_data(x, y, dy)
         self.set_model(polynomial_model(degree), use_legendre=legendre)
+        self.model.set_xsource(x)
         
     # ============== #
     #  Main Methods  #
@@ -97,7 +98,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
     # - To Be Defined
     def _get_model_args_(self):
         """ see model.get_loglikelihood"""
-        return self._scaled_xdata if self.model.use_legendre else self.xdata, self.data, self.errors, False
+        return self.data, self.errors
     
     # - Super It
     def set_data(self, x, y, dy=None, names=None):
@@ -106,12 +107,19 @@ class PolynomeFit( BaseFitter, DataHandler ):
         self._derived_properties["xscaled"]  = (x-np.min(x))/(np.max(x)-np.min(x))*2-1.
         super(PolynomeFit, self).set_data(y, errors=dy, names=names)
 
-    def set_model(self, model, use_legendre=False, **kwargs):
+    def set_model(self, model, use_legendre=True, **kwargs):
         """ """
         super(PolynomeFit, self).set_model(model, **kwargs)
         self.model.use_legendre=use_legendre
 
-
+    def _display_data_(self, ax, ecolor="0.3", **prop):
+        """ """
+        from astrobject.utils.mpladdon import errorscatter
+        pl = ax.plot(self.xdata,self.data, **prop)
+        er = ax.errorscatter(self.xdata,self.data, dy=self.errors, zorder=prop["zorder"]-1,
+                             ecolor=ecolor)
+        return pl
+        
     def show(self, savefile=None, show=True, ax=None,
              show_model=True, xrange=None,
              mcmc=False, nsample=100, mlw=2, ecolor="0.3",
@@ -119,8 +127,9 @@ class PolynomeFit( BaseFitter, DataHandler ):
              **kwargs):
         """ """
         import matplotlib.pyplot as mpl 
-        from astrobject.utils.mpladdon import figout, errorscatter
+        from astrobject.utils.mpladdon import figout
         from astrobject.utils.tools    import kwargs_update
+        
         self._plot = {}
         if ax is None:
             fig = mpl.figure(figsize=[8,5])
@@ -133,19 +142,16 @@ class PolynomeFit( BaseFitter, DataHandler ):
         # - Basics
         prop = kwargs_update( dict(ms=15, mfc=mpl.cm.Blues(0.6,0.9), mec=mpl.cm.Blues(0.8,0.9),
                                    ls="None",mew=1.5, marker="o", zorder=5), **kwargs)
+        pl = self._display_data_(ax, ecolor=ecolor,**prop)
         
-        pl = ax.plot(self.xdata,self.data, **prop)
-        er = ax.errorscatter(self.xdata,self.data, dy=self.errors, zorder=prop["zorder"]-1,
-                             ecolor=ecolor)
         # - Model
         if show_model and self.has_fit_run(): 
-            if xrange is None:
-                xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
-            else:
-                xx = np.linspace(xrange[0],xrange[1], 1000)
-            
+            if xrange is not None:
+                xx = np.linspace(self.xdata.min(), self.xdata.max(), 1000)
+                self.model.set_xsource(xx)
+                
             if not mcmc:
-                model = ax.plot(xx,self.model.get_model(xx), ls="-", lw=modellw,
+                model = ax.plot(self.model.xsource,self.model.get_model(), ls="-", lw=modellw,
                                 color=modelcolor, scalex=False, scaley=False, zorder=np.max([prop["zorder"]-2,1]))
                 
             elif not self.has_mcmc():
@@ -154,11 +160,11 @@ class PolynomeFit( BaseFitter, DataHandler ):
             else:
                 if mcmccolor is None:
                     mcmccolor = mpl.cm.binary(0.6,0.3)
-                model = [ax.plot(xx,self.model.get_model(xx, param=param), color=mcmccolor,
+                model = [ax.plot(xx,self.model.get_model(param=param), color=mcmccolor,
                                 scalex=False, scaley=False, zorder=np.max([prop["zorder"]-3,1]))
                         for param in self.mcmc.samples[np.random.randint(len(self.mcmc.samples), size=nsample)]]
                 
-                model.append(ax.plot(xx,self.model.get_model(xx, param=np.asarray(self.mcmc.derived_values).T[0]), 
+                model.append(ax.plot(xx,self.model.get_model(param=np.asarray(self.mcmc.derived_values).T[0]), 
                                         ls="-", lw=modellw, color=modelcolor,
                                         scalex=False, scaley=False, zorder=np.max([prop["zorder"]-2,1])))
                 
@@ -192,10 +198,17 @@ class NormPolynomeFit( PolynomeFit ):
     def __init__(self, x, y, dy, degree, ngauss,
                  names=None, legendre=True):
         """ """
+        self.__build__()
         self.set_data(x, y, dy)
         self.set_model(normal_and_polynomial_model(degree, ngauss),
                            use_legendre=legendre)
-
+        self.model.set_xsource(x)
+    def _display_data_(self, ax, ecolor="0.3", **prop):
+        """ """
+        from astrobject.utils.mpladdon import specplot
+        return ax.specplot(self.xdata,self.data, var=self.errors**2,
+                        bandprop={"color":ecolor},**prop)
+        
     def show(self,savefile=None, show=True, ax=None, show_model=True, xrange=None,
                  show_gaussian=False,
                  mcmc=False, nsample=100, mlw=2, ecolor='0.3',
@@ -216,13 +229,9 @@ class NormPolynomeFit( PolynomeFit ):
         
         # -- Add individual gaussian
         if show_gaussian:
-            if xrange is None:
-                xx = np.linspace(self.xdata.min()-np.abs(self.xdata.max()), self.xdata.max()*2, 1000)
-            else:
-                xx = np.linspace(xrange[0],xrange[1], 1000)
-            
-            cont = self.model._get_continuum_(xx, True)
-            [pl["ax"].plot(xx,self.model.get_ith_gaussian(xx,i, add_continuum=False)+cont,
+            cont = self.model._get_continuum_()
+            [pl["ax"].plot(self.model.xsource,
+                               self.model.get_ith_gaussian(self.model.xsource,i, add_continuum=False)+cont,
                                ls="-", lw=modellw/2.,alpha=0.5,
                                color=modelcolor, scalex=False, scaley=False, zorder=np.max([pl["prop"]["zorder"]-1,1]))
                                
@@ -230,6 +239,7 @@ class NormPolynomeFit( PolynomeFit ):
 
         pl["figure"].figout(savefile=savefile, show=show)
         return pl
+    
 ############################
 #                          #
 # Model Legendre Polynome  #
@@ -255,9 +265,10 @@ class PolyModel( BaseModel ):
     """ Virtual Class able to handle any polynomial order fitter """
     DEGREE = 0
     
-    PROPERTIES         = ["parameters", "legendre"]
+    PROPERTIES         = ["parameters", "legendre",
+                          "xsource","xsource_start","xsource_steps"]
     SIDE_PROPERTIES    = []
-    DERIVED_PROPERTIES = []
+    DERIVED_PROPERTIES = ["xsource_scaled"]
 
     # ================ #
     #  Main Method     #
@@ -276,7 +287,7 @@ class PolyModel( BaseModel ):
         self._properties["parameters"] = np.asarray(parameters)
 
         
-    def get_model(self, x, reshapex=True, param=None):
+    def get_model(self, x=None, param=None):
         """ return the model for the given data.
         The modelization is based on legendre polynomes that expect x to be between -1 and 1.
         This will create a reshaped copy of x to scale it between -1 and 1 but
@@ -289,24 +300,23 @@ class PolyModel( BaseModel ):
         if param is not None:
             self.setup(param)
             
-        if self.use_legendre:
-            if reshapex:
-                x = (x-x.min())/(x.max()-x.min()) *2 -1
+        if x is not None:
+            self.set_xsource(x)
             
-            model = np.asarray([orthogonal.legendre(i)(x) for i in range(self.DEGREE)])
+        if self.use_legendre:            
+            model = np.asarray([orthogonal.legendre(i)(self.xsource_scaled) for i in range(self.DEGREE)])
         else:
-            model = np.asarray([x**i for i in range(self.DEGREE)])
+            model = np.asarray([self.xfit**i for i in range(self.DEGREE)])
             
         return np.dot(model.T, self.parameters.T).T
     
-    def get_loglikelihood(self, x, y, dy, reshapex=False):
+    def get_loglikelihood(self, y, dy, x=None):
         """ Measure the likelihood to find the data given the model's parameters.
         Set pdf to True to have the array prior sum of the logs (array not in log=pdf).
 
         In the Fitter define _get_model_args_() that should return the input of this
         """
-        
-        res = y - self.get_model(x, reshapex=reshapex)
+        res = y - self.get_model(x)
         return -0.5 * np.sum(res**2/dy**2)
 
     # ----------- #
@@ -331,6 +341,49 @@ class PolyModel( BaseModel ):
     def use_legendre(self, uselegendre):
         self._side_properties["legendre"] = bool(uselegendre)
 
+    # -------------
+    # x values
+    def set_xsource(self, x):
+        self._properties["xsource_start"],self._properties["xsource_steps"] = self.parse_xdata(x)
+        self._properties["xsource"]        = np.asarray(x)
+        self._derived_properties["nsteps"] = len(self.xsource_steps)
+        self._derived_properties["xsource_scaled"] = None
+        
+    def parse_xdata(self, x):
+        """ converts the given array in steps+star format """
+        return x[0],x[1:]-x[:-1]
+    
+    @property
+    def xsource(self):
+        """ """
+        return self._properties["xsource"]
+
+    @property
+    def xfit(self):
+        return self.xsource
+    
+    @property
+    def xsource_scaled(self):
+        """ """
+        if self._derived_properties["xsource_scaled"] is None and self.xsource is not None:
+            self._derived_properties["xsource_scaled"] = (np.asarray(self.xsource, dtype="float")-self.xsource.min())/(self.xsource.max()-self.xsource.min()) *2 -1
+        return self._derived_properties["xsource_scaled"]
+            
+    @property
+    def xsource_start(self):
+        """ x-pixelisation upon which the lbda is built. 'start, step' format """
+        return self._properties["xsource_start"]
+    
+    @property
+    def xsource_steps(self):
+        """ x-pixelisation upon which the lbda is built. 'start, step' format """
+        return self._properties["xsource_steps"]
+
+    # - pixels Statistics
+    @property
+    def nsteps(self):
+        """ Size of the step array """
+        self._derived_properties["nsteps"]
         
 ###############################
 #                             #
@@ -361,10 +414,11 @@ class NormPolyModel( PolyModel ):
     
     def __new__(cls,*arg,**kwarg):
         """ Black Magic allowing generalization of Polynomial models """
-        
-        cls.FREEPARAMETERS = ["a%d"%(i) for i in range(cls.DEGREE)] + \
-          ["mu%d"%(i) for i in range(cls.NGAUSS)]  + ["sig%d"%(i) for i in range(cls.NGAUSS)]+ ["ampl%d"%(i) for i in range(cls.NGAUSS)]
-        print cls.FREEPARAMETERS
+        if not hasattr(cls,"FREEPARAMETERS"):
+            cls.FREEPARAMETERS = ["a%d"%(i) for i in range(cls.DEGREE)]
+        else:
+            cls.FREEPARAMETERS += ["a%d"%(i) for i in range(cls.DEGREE)]
+        cls.FREEPARAMETERS += ["mu%d"%(i) for i in range(cls.NGAUSS)]  + ["sig%d"%(i) for i in range(cls.NGAUSS)]+ ["ampl%d"%(i) for i in range(cls.NGAUSS)]
         
         return super(PolyModel,cls).__new__(cls)
 
@@ -379,12 +433,11 @@ class NormPolyModel( PolyModel ):
         """ """
         if param is not None:
            self.setup(param)
-        cont = 0 if not add_continuum else self._get_continuum_(x, reshapex=True)
+        cont = 0 if not add_continuum else self._get_continuum_(x)
         return stats.norm.pdf(x, loc=self.normparameters[ithgauss::self.NGAUSS][0],
                             scale=self.normparameters[ithgauss::self.NGAUSS][1])*self.normparameters[ithgauss::self.NGAUSS][2] + cont
 
-    
-    def get_model(self, x, reshapex=True, param=None):
+    def get_model(self, x=None, param=None):
         """ return the model for the given data.
         The modelization is based on legendre polynomes that expect x to be between -1 and 1.
         This will create a reshaped copy of x to scale it between -1 and 1 but
@@ -396,16 +449,18 @@ class NormPolyModel( PolyModel ):
         """
         if param is not None:
             self.setup(param)
-
-        continuum = self._get_continuum_(x, reshapex=reshapex)
+        if x is not None:
+            self.set_xsource(x)
+            
+        continuum = self._get_continuum_()
         
-        return continuum + np.sum([stats.norm.pdf(x, loc=self.normparameters[i::self.NGAUSS][0],
+        return continuum + np.sum([stats.norm.pdf(self.xfit, loc=self.normparameters[i::self.NGAUSS][0],
                                                 scale=self.normparameters[i::self.NGAUSS][1])*self.normparameters[i::self.NGAUSS][2]
                             for i in range(self.NGAUSS)], axis=0)
 
-    def _get_continuum_(self,x, reshapex):
+    def _get_continuum_(self,x=None):
         """ """
-        return super(NormPolyModel, self).get_model(x, reshapex=reshapex, param=None)
+        return super(NormPolyModel, self).get_model(x,param=None)
     
     @property
     def normparameters(self):

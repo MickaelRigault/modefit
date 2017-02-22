@@ -12,11 +12,49 @@ from .utils import kwargs_update
 from .baseobjects import BaseModel,BaseFitter, DataHandler
 from .unimodal import normal
 
-__all__ = ["stepfit"]
+__all__ = ["stepfit","bimodal_fit"]
 
 # ========================= #
 #  Main Methods             #
 # ========================= #
+def bimodal_fit(data, errors, proba=None, masknan=True, names=None, **kwargs):
+    """  Fit a binormal distribution in your data.
+
+    
+    Parameters
+    -----------
+    data, errors: [array, array]
+        The y-axis data (and its errors) that potentially is bimodal.
+
+    proba: [array] -optional-
+        If you already know the probability of each data point to be in 
+        one mode or the other, set it here. It is fit otherwise.
+
+    masknan: [bool] -optional-
+        Remove the nan values (in x, data or errors) prior to load StepFit
+
+    names: [array] -optional-
+        names for the data points.
+
+    Returns
+    -------
+    BimodalFit
+    """
+    if masknan:
+        flagnan = (data !=data) | (errors != errors)
+        
+        return BimodalFit(data[~flagnan],errors[~flagnan],
+                          proba=proba[~flagnan]   if proba is not None else None,
+                          names = np.asarray(names)[~flagnan] if names is not None else None,
+                          modelname="Binormal" if proba is not None else "FloatingBinormal",
+                         **kwargs)
+
+    return BimodalFit(data,errors,proba=proba,
+                          names = names,
+                          modelname="Binormal" if proba is not None else "FloatingBinormal",
+                         **kwargs)
+
+
 def stepfit(x,data,errors,proba=None,dx=None,xcut=None,
             masknan=True, names=None, **kwargs):
     """ Fit a Step in you Data !
@@ -86,7 +124,7 @@ class BimodalFit( BaseFitter, DataHandler ):
     # ========================= #
     # = Initialization        = #  
     # ========================= #
-    def __init__(self,data, errors, proba,
+    def __init__(self, data, errors, proba=None,
                  names=None, use_minuit=True,
                  modelname="Binormal", empty=False):
         """  low-level class to enable to fit a bimodal model on data
@@ -102,9 +140,10 @@ class BimodalFit( BaseFitter, DataHandler ):
         errors: [array]
             Errors associated to the data.
                                    
-        proba: [array]
+        proba: [array] -optional-
             Probability of the data to belong to one mode or the other.
-            The probabilies must be float between 0 and 1
+            The probabilies must be float between 0 and 1.
+            If Not provided, the modelname should be 'ModelFloatingBinormal'
     
         names: [string-array/None] - optional -
             Names associated with the data. This enable to follow the data
@@ -137,7 +176,7 @@ class BimodalFit( BaseFitter, DataHandler ):
         self.use_minuit = use_minuit
         self.set_model(eval("Model%s()"%modelname))
 
-    def set_data(self,data,errors,proba,names=None):
+    def set_data(self,data,errors,proba=None,names=None):
         """ set the information for the fit.
 
         Parameters
@@ -167,11 +206,11 @@ class BimodalFit( BaseFitter, DataHandler ):
         """
         # ------------------------ #
         # -- Fatal Input Errors -- #
-        if (np.asarray(proba)>1).any() or (np.asarray(proba)<0).any():
-            raise ValueErrors("probabilities (proba) must be between 0 and 1")
+        if proba is not None and ((np.asarray(proba)>1).any() or (np.asarray(proba)<0).any()):
+            raise ValueError("probabilities (proba) must be between 0 and 1")
         
-        if len(proba)!=len(data) or len(errors)!= len(data):
-            raise ValueErrors("data, errors and proba must have the same size")
+        if (proba is not None and len(proba)!=len(data)) or len(errors)!= len(data):
+            raise ValueError("data, errors and proba must have the same size")
         
         # -- Warning -- #
         if names is not None and len(names) != len(data):
@@ -180,7 +219,7 @@ class BimodalFit( BaseFitter, DataHandler ):
 
         self._properties["data"] = np.asarray(data)
         self._properties["errors"] = np.asarray(errors)
-        self._properties["proba"] = np.asarray(proba)
+        self._properties["proba"] = np.asarray(proba) if proba is not None else proba
 
         self._side_properties["names"] = np.asarray(names) if names is not None else None
         
@@ -189,6 +228,8 @@ class BimodalFit( BaseFitter, DataHandler ):
     # = Fit                   = #  
     # ========================= #        
     def _get_model_args_(self):
+        if ModelFloatingBinormal in self.model.__class__.__mro__:
+            return self.data[self.used_indexes],self.errors[self.used_indexes]
         return self.data[self.used_indexes],self.errors[self.used_indexes],self.proba[self.used_indexes]
         
     # ====================== #
@@ -202,7 +243,7 @@ class BimodalFit( BaseFitter, DataHandler ):
     
     @property
     def proba_r(self):
-        """ probability to belog to the second group (1-propa)"""
+        """ probability to belog to the second group (1-proba)"""
         return 1-self.proba
 
     @property
@@ -308,7 +349,73 @@ class ModelBinormal( BaseModel ):
     #   Properties       #
     # ================== #
 
+
+# ========================== #
+#                            #
+#   Fit the proba as well    #
+#                            #
+# ========================== #
+class ModelFloatingBinormal( ModelBinormal ):
+    """ """
+    FREEPARAMETERS = ["mean_a","sigma_a",
+                      "mean_b","sigma_b","proba_a"]
+        
+    proba_a_guess = 0.5
+    proba_a_boundaries=[0.00000001,0.99999999]
+    
+    def setup(self,parameters):
+        """ """
+        self.mean_a,self.sigma_a,self.mean_b,self.sigma_b, self.proba_a = parameters
+
+    # ----------------------- #
+    # - LikeLiHood and Chi2 - #
+    # ----------------------- #
+    def get_loglikelihood(self,x,dx):
+        """ Measure the likelihood to find the data given the model's parameters """
+        return np.sum(np.log( self.pdf(x,dx) ))
+
+    # ------------- #
+    # - Modeling  - #
+    # ------------- #
+    def cdf(self, x, dx):
+        """ """
+        return self.proba_a * stats.norm.cdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)) + \
+               (1-self.proba_a) * stats.norm.cdf(x,loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2))
+               
+    def pdf(self,x, dx):
+        """ return the log likelihood of the given case. See get_loglikelihood """
+        return self.proba_a * stats.norm.pdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)) + \
+               (1-self.proba_a) * stats.norm.pdf(x,loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2))
+
+    def get_chauvenet_mask(self, x, dx, outlier_cut=0.5):
+        """
+        outlier_proba: [None, 0<float<1] -optional-
+        If you perform an outlier rejection following the Chauvenet's criterium,
+        if a target as less than `outlier_proba` chance to exist, it is removed.
+        This account for the size of you sample and assumes a 2-tailed outlier
+        rejection.
+        To work, the distribution have to be gaussian. This criterium is not iterative
+        (i.e. only applied once).
             
+        The Historical Chauvenet's criterium uses 'outlier_proba'=0.5
+            
+        Example:
+            For 100 points, with 'outlier_proba'=0.5 (historical Chauvenet choice)
+            the outlier rejection consist of a 2.8sigma clipping.
+            With 'outlier_proba'=0.1, this becomes a 3.3 sigma cliping.    
+        """
+        cdf = self.cdf(x, dx )
+        outlier_cut = outlier_cut/(2.*len(x))
+        return (cdf<outlier_cut) + (cdf>(1-outlier_cut))
+
+    def _minuit_chi2_(self,mean_a,sigma_a,
+                     mean_b,sigma_b, proba_a):
+        """
+        """
+        # USELESS I THINK
+        parameter = mean_a,sigma_a,mean_b,sigma_b, proba_a
+        return self.get_chi2(parameter)
+
 # ========================== #
 #                            #
 #   Step                     #
@@ -629,3 +736,6 @@ class StepFit( BimodalFit ):
         """ split value along the x-axes between two groups """
         return self._properties["xcut"]
     
+
+
+
