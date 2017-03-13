@@ -1,5 +1,7 @@
 # modefit
 
+[![PyPI](https://img.shields.io/pypi/v/modefit.svg?style=flat-square)](https://pypi.python.org/pypi/modefit)
+
 Fit your data !
 
 The concept of this API is to be able to fit your data using minuit or scipy as will as to run Markov Chain Mote Carlo 
