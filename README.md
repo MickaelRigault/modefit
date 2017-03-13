@@ -23,5 +23,5 @@ Currently, the following models are implemented:
 ## Dependencies
 
 * iminuit (>1.1)
-* astrobject (>=0.4)
+* propobject (>=0.1)
 * emcee (>=2.0)
