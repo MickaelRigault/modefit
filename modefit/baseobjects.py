@@ -104,12 +104,12 @@ class MCMC( BaseObject ):
         # -- run the mcmc        
         self._derived_properties["sampler"] = emcee.EnsembleSampler(self.nwalkers, self.nparam, self.lnprob)
         if verbose:
-            print "-> emcee EmsembleSampler defined"
+            print("-> emcee EmsembleSampler defined")
             
         _ = self.sampler.run_mcmc(self.poswalkers, self.nrun)
         
         if verbose:
-            print "-> MCMC sampler.run_mcmc() done"
+            print("-> MCMC sampler.run_mcmc() done")
             
     # ------------ #
     # - SETTER   - #
@@ -1207,7 +1207,7 @@ class BaseFitter( BaseObject ):
                 fakeMatrix = np.zeros((len(self._fitparams),len(self._fitparams)))
                 for i,k in enumerate(self.model.freeparameters):
                     fakeMatrix[i,i] = self.minuit.errors[k]**2
-                print "*WARNING* Inaccurate covariance Matrix. Only trace defined"
+                warnings.warn("Inaccurate covariance Matrix. Only trace defined")
                 return self.model._read_hess_(fakeMatrix)
         else:
             if "hess_inv" in self.scipy_output:
@@ -1247,11 +1247,11 @@ class BaseFitter( BaseObject ):
         """
         """
         self._setup_minuit_(step=step)
-        if verbose: print "STARTS MINUIT FIT"
+        if verbose: print("STARTS MINUIT FIT")
         self._migrad_output_ = self.minuit.migrad()
         
         if self._migrad_output_[0]["is_valid"] is False:
-            print "** WARNING ** migrad is not valid"
+            warnings.warn("migrad is not valid")
             self.fitOk = False
         elif verbose:
             self.fitOk = True
@@ -1358,13 +1358,7 @@ class BaseModel( BaseObject ):
                 if name+info in dir(self):
                     infodico[name+info] = eval("self.%s"%(name+info))
         return infodico
-    
-    def get_set_param_input(self):
-        """ USE get_param_input """
-        print "WARNING -- Soon DECREPATED use get_param_input"
-        return self.get_param_input()
-    
-
+        
     # ==================== #
     # = Bayesian         = #
     # ==================== #
@@ -1372,7 +1366,7 @@ class BaseModel( BaseObject ):
     # and chi2 = -2 * logLikelihood
     def lnprior(self,parameters, verbose=True):
         """ perfectely flat prior, should be change by inheriting classed"""
-        if verbose: print "Perfectly flat prior used. Always 0 (set verbose=False to avoid this message)"
+        if verbose: print("Perfectly flat prior used. Always 0 (set verbose=False to avoid this message)")
         return 0
         
     def lnprob(self,parameters):

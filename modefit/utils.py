@@ -100,6 +100,7 @@ def insert_ax(ax,location,shrunk=0.7,space=.05,
     --------
     axes (the new axis)
     """
+    from matplotlib.transforms  import Bbox
     # --------------------
     # hist x
     # -------------------- #
