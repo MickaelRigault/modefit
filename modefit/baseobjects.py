@@ -8,7 +8,7 @@ import numpy as np
 
 # - astrobject dependencies
 from propobject import BaseObject
-from .utils import make_method
+from .utils     import make_method
 
 try:
     from iminuit import Minuit
@@ -239,7 +239,7 @@ class MCMC( BaseObject ):
         """
         # -- This show the 
         import matplotlib.pyplot as mpl
-        from astrobject.utils.mpladdon import figout
+        from .utils import figout
         if not self.has_chain():
             raise AttributeError("you must run mcmc first")
         
@@ -297,7 +297,7 @@ class MCMC( BaseObject ):
         except ImportError:
             raise ImportError("install corner to be able to do this plot => sudo pip install corner.")
         
-        from astrobject.utils.mpladdon import figout
+        from .utils import figout
         
         fig = corner.corner(self.samples, labels=self.freeparameters, 
                         truths=self.guess if truths is None else truths,

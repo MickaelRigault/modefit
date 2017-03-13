@@ -583,7 +583,7 @@ class StepFit( BimodalFit ):
             ax,axhistx,axhisty = axes
             fig = ax.figure
         else:
-            from astrobject.utils.mpladdon import add_threeaxes
+            from .utils import add_threeaxes
             fig = figure if figure is not None else \
               mpl.figure(figsize=[7,5]) if show_xhist else mpl.figure(figsize=[8,4])
             ax,axhistx,axhisty = fig.add_threeaxes(xhist=show_xhist,**propaxes)
@@ -632,7 +632,7 @@ class StepFit( BimodalFit ):
         #-- if you already made the fit
         if self.has_fit_run():
             # -- To be improve, this does not move with the axis if user does so.
-            from astrobject.utils.mpladdon import hline,hspan
+            from .utils import hline,hspan
             # => Folded
             if "__iter__" in dir(self.fitvalues['mean_a']):
                 mean_a, mean_aerr,mean_b, mean_berr = \
@@ -674,7 +674,7 @@ class StepFit( BimodalFit ):
         if not self.has_kfold():
             raise AttributeError("No kfolding set.")
 
-        from astrobject.utils.mpladdon import figout
+        from .utils import figout
         self._plot = {}
         
         # - Settings - #

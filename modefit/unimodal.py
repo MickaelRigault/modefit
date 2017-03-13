@@ -219,7 +219,7 @@ class UnimodalFit( BaseFitter, DataHandler ):
         ------
         dict (plot information like fig, ax, pl ; output in self._plot)
         """
-        from astrobject.utils.mpladdon import figout
+        from .utils import figout
         # ----------- #
         # - setting - #
         # ----------- #

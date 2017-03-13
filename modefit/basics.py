@@ -114,7 +114,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
 
     def _display_data_(self, ax, ecolor="0.3", **prop):
         """ """
-        from astrobject.utils.mpladdon import errorscatter
+        from .utils import errorscatter
         pl = ax.plot(self.xdata,self.data, **prop)
         er = ax.errorscatter(self.xdata,self.data, dy=self.errors, zorder=prop["zorder"]-1,
                              ecolor=ecolor)
@@ -127,8 +127,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
              **kwargs):
         """ """
         import matplotlib.pyplot as mpl 
-        from astrobject.utils.mpladdon import figout
-        from astrobject.utils.tools    import kwargs_update
+        from .utils import figout, kwargs_update
         
         self._plot = {}
         if ax is None:
@@ -205,7 +204,7 @@ class NormPolynomeFit( PolynomeFit ):
         self.model.set_xsource(x)
     def _display_data_(self, ax, ecolor="0.3", **prop):
         """ """
-        from astrobject.utils.mpladdon import specplot
+        from .utils import specplot
         return ax.specplot(self.xdata,self.data, var=self.errors**2,
                         bandprop={"color":ecolor},**prop)
         
@@ -215,8 +214,7 @@ class NormPolynomeFit( PolynomeFit ):
                  mcmccolor=None, modelcolor='k', modellw=2, **kwargs):
         """ """
         import matplotlib.pyplot as mpl 
-        from astrobject.utils.mpladdon import figout, errorscatter
-        from astrobject.utils.tools    import kwargs_update
+        from .utils import figout, errorscatter, kwargs_update
 
         pkwargs = kwargs_update(dict(ls="-", marker="None"),**kwargs)
         
