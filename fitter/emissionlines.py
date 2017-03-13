@@ -183,7 +183,6 @@ def lnprior_dispersion(dispersion, loc, scale, boundaries=[0,None]):
     
     return np.log(stats.norm.pdf(dispersion,loc=loc, scale=scale))
      
-
 # ========================== #
 #                            #
 #     Fitter                 #

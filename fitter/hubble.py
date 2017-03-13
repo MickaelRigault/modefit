@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" Module to fit Hubble Diagram of Type Ia Supernovae """
+""" Module to do simple Hubble Diagram fit on Type Ia Supernovae redshift-luminosity relation """
 
 import warnings
 import numpy             as np
 import matplotlib.pyplot as mpl
-from scipy          import stats, linalg, optimize
+from scipy           import stats, linalg, optimize
 
 # - Astropy
 from astropy import constants
