@@ -1355,7 +1355,7 @@ class BaseModel( BaseObject ):
         infodico = {}
         for name in self.freeparameters:
             for info in ["_guess","_fixed","_boundaries"]:
-                if name+info in dir(self):
+                if hasattr(self, name+info):
                     infodico[name+info] = eval("self.%s"%(name+info))
         return infodico
         
