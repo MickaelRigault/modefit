@@ -121,7 +121,7 @@ class PolynomeFit( BaseFitter, DataHandler ):
         return pl
         
     def show(self, savefile=None, show=True, ax=None,
-             show_model=True, xrange=None,
+             show_model=True, xrange=None, parameters=None,
              mcmc=False, nsample=100, mlw=2, ecolor="0.3",
              mcmccolor=None, modelcolor= "k", modellw=2, 
              **kwargs):
@@ -144,13 +144,16 @@ class PolynomeFit( BaseFitter, DataHandler ):
         pl = self._display_data_(ax, ecolor=ecolor,**prop)
         
         # - Model
-        if show_model and self.has_fit_run(): 
+        if show_model and (self.has_fit_run() or parameters is not None): 
             if xrange is not None:
                 xx = np.linspace(self.xdata.min(), self.xdata.max(), 1000)
+                print(xx)
                 self.model.set_xsource(xx)
                 
-            if not mcmc:
-                model = ax.plot(self.model.xsource,self.model.get_model(), ls="-", lw=modellw,
+            if not mcmc or (parameters is not None):
+                model_to_show = self.model.get_model() if parameters is None else self.get_model(np.asarray(parameters))
+                    
+                model = ax.plot(self.model.xsource, model_to_show, ls="-", lw=modellw,
                                 color=modelcolor, scalex=False, scaley=False, zorder=np.max([prop["zorder"]-2,1]))
                 
             elif not self.has_mcmc():
@@ -202,6 +205,7 @@ class NormPolynomeFit( PolynomeFit ):
         self.set_model(normal_and_polynomial_model(degree, ngauss),
                            use_legendre=legendre)
         self.model.set_xsource(x)
+        
     def _display_data_(self, ax, ecolor="0.3", **prop):
         """ """
         from .utils import specplot
@@ -263,9 +267,9 @@ class PolyModel( BaseModel ):
     """ Virtual Class able to handle any polynomial order fitter """
     DEGREE = 0
     
-    PROPERTIES         = ["parameters", "legendre",
+    PROPERTIES         = ["parameters",
                           "xsource","xsource_start","xsource_steps"]
-    SIDE_PROPERTIES    = []
+    SIDE_PROPERTIES    = ["legendre"]
     DERIVED_PROPERTIES = ["xsource_scaled"]
 
     # ================ #
@@ -342,14 +346,17 @@ class PolyModel( BaseModel ):
     # -------------
     # x values
     def set_xsource(self, x):
-        self._properties["xsource_start"],self._properties["xsource_steps"] = self.parse_xdata(x)
+        self._properties["xsource_start"],self._properties["xsource_steps"] = self.parse_xdata(np.asarray(x))
         self._properties["xsource"]        = np.asarray(x)
         self._derived_properties["nsteps"] = len(self.xsource_steps)
         self._derived_properties["xsource_scaled"] = None
         
     def parse_xdata(self, x):
         """ converts the given array in steps+star format """
-        return x[0],x[1:]-x[:-1]
+        try:
+            return x[0],x[1:]-x[:-1]
+        except:
+            raise ValueError('Incorrect x format', x)
     
     @property
     def xsource(self):

@@ -2,7 +2,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 """This module gather the customed decorators of astrobject"""
-
+import numpy as np
 import matplotlib.pyplot as mpl
 
 def make_method(obj):

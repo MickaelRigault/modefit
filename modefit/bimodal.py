@@ -487,13 +487,13 @@ class StepFit( BimodalFit ):
         # -- The x Information -- #
         # ----------------------- #
         # -- basic x-stuffs
-        self._properties["x"]  = np.asarray(x)
-        self._side_properties["x"] = dx if dx is None else np.asarray(dx)
-        self._properties["xcut"] = xcut
+        self._properties["x"]       = np.asarray(x)
+        self._side_properties["dx"] = dx if dx is None else np.asarray(dx)
+        self._properties["xcut"]    = xcut
         # -- The Probability given the step location
         if proba is None:
             if xcut is None:
-                raise ValueErrors("You need to give either proba or xcut to enable to define proba")
+                raise ValueError("You need to give either proba or xcut to enable to define proba")
             proba = self.get_proba()
                     
         # ----------------------- #
