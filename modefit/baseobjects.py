@@ -6,19 +6,22 @@
 import warnings
 import numpy as np
 
+from scipy      import stats
+
 # - astrobject dependencies
-from propobject import BaseObject
+try:
+    from propobject import BaseObject
+except ImportError:
+    raise ImportError("You need to install propobject: pip install propobject")
+try:
+    from iminuit import Minuit    
+except ImportError:
+    raise ImportError("You need to install iminuit: pip install iminuit")
+
+
 from .utils     import make_method
 
-try:
-    from iminuit import Minuit
-    _HASMINUIT = True
-    
-except ImportError:
-    warnings.warn("iminuit not accessible. You won't be able to use minuit functions", ImportError)
-    _HASMINUIT = False
 
-    
 ###################################
 #                                 #
 #   Markov Chain Monte Carlo      #
@@ -772,6 +775,19 @@ class BaseFitter( BaseObject ):
             self._fit_scipy_()
         
         self._fit_readout_()
+
+    def get_residuals(self, parameters=None):
+        """ the data residuals:
+        self.data - self.get_model(parameters) 
+
+        Returns
+        -------
+        Array
+        """
+        return self.data - self.get_model(self._fitparams if parameters is None else parameters)
+    
+        
+
         
     def get_modelchi2(self,parameters):
         """ get the associated -2 log Likelihood
