@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
     if _has_setuptools:
         packages = find_packages()
-        print packages
+        print(packages)
     else:
         # This should be updated if new submodules are added
         packages = ['modefit']
@@ -60,6 +60,7 @@ if __name__ == "__main__":
           classifiers=[
               'Intended Audience :: Science/Research',
               'Programming Language :: Python :: 2.7',
+              'Programming Language :: Python :: 3.5',
               'License :: OSI Approved :: BSD License',
               'Topic :: Scientific/Engineering :: Astronomy',
               'Operating System :: POSIX',
