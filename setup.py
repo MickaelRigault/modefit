@@ -11,7 +11,7 @@ MAINTAINER_EMAIL = 'mrigault@physik.hu-berlin.de'
 URL = 'https://github.com/MickaelRigault/modefit/'
 LICENSE = 'BSD (3-clause)'
 DOWNLOAD_URL = 'https://github.com/MickaelRigault/modefit/tarball/0.2'
-VERSION = '0.2.1'
+VERSION = '0.2.2'
 
 try:
     from setuptools import setup, find_packages

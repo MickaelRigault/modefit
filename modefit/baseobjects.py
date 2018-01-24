@@ -1333,15 +1333,15 @@ class BaseModel( BaseObject ):
         """
         obj = super(BaseModel,cls).__new__(cls)
         
-        exec "@make_method(BaseModel)\n"+\
+        exec("@make_method(BaseModel)\n"+\
              "def _minuit_chi2_(self,%s): \n"%(", ".join(obj.FREEPARAMETERS))+\
              "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
-             "    return self.get_chi2(parameters)\n"
+             "    return self.get_chi2(parameters)\n")
 
-        exec "@make_method(BaseModel)\n"+\
+        exec("@make_method(BaseModel)\n"+\
              "def _minuit_lnprob_(self,%s): \n"%(", ".join(obj.FREEPARAMETERS))+\
              "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
-             "    return self.lnprob(parameters)\n"
+             "    return self.lnprob(parameters)\n")
 
         return obj
     
