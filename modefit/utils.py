@@ -35,7 +35,7 @@ def kwargs_update(default,**kwargs):
     """
     """
     k = default.copy()
-    for key,val in kwargs.iteritems():
+    for key,val in kwargs.items():
         k[key] = val
         
     return k
@@ -50,7 +50,7 @@ def kwargs_extract(default,**kwargs):
     """
     k = default.copy()
     l = {}
-    for key,val in kwargs.iteritems():
+    for key,val in kwargs.items():
         if key in k.keys():
             k[key] = val
         else:
@@ -209,6 +209,10 @@ def _read_bound_(lims,xmin,xmax):
         xmax = lims[1] + size*3
     return xmin,xmax
 
+def is_arraylike(a):
+    """ Tests if 'a' is an array / list / tuple """
+    return isinstance(a, (list, tuple, np.ndarray) )
+
 # ========================== #
 # =  Figure Add-on         = #
 # ========================== #
@@ -261,21 +265,21 @@ def add_threeaxes(figure,xhist=True,yhist=True,
     # ================
     # Input Parsing
     # ================ 
-    if "__iter__" not in dir(shrunk):
+    if not is_arraylike(shrunk):
         shrunk = [shrunk,shrunk]
     elif len(shrunk) == 1:
         shrunk = [shrunk[0],shrunk[0]]
     elif len(shrunk)>2:
         raise ValueError("shrunk cannot have more than 2 entries (x,y)")
 
-    if "__iter__" not in dir(space):
+    if not is_arraylike(space):
         space = [space,space]
     elif len(space) == 1:
         space = [space[0],space[0]]
     elif len(space)>2:
         raise ValueError("space cannot have more than 2 entries (x,y)")
     
-    if "__iter__" not in dir(axspace):
+    if not is_arraylike(axspace):
         axspace = [axspace,axspace]
     elif len(axspace) == 1:
         axspace = [axspace[0],axspace[0]]

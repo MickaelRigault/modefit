@@ -8,7 +8,7 @@ from scipy          import stats
 import matplotlib.pyplot as mpl
 import warnings
 # - local dependencies
-from .utils import kwargs_update
+from .utils import kwargs_update, is_arraylike
 from .baseobjects import BaseModel,BaseFitter, DataHandler
 from .unimodal import normal
 
@@ -634,7 +634,7 @@ class StepFit( BimodalFit ):
             # -- To be improve, this does not move with the axis if user does so.
             from .utils import hline,hspan
             # => Folded
-            if "__iter__" in dir(self.fitvalues['mean_a']):
+            if  is_arraylike(self.fitvalues['mean_a']):
                 mean_a, mean_aerr,mean_b, mean_berr = \
                       np.mean(self.fitvalues['mean_a']),np.mean(self.fitvalues['mean_a.err']), \
                       np.mean(self.fitvalues['mean_b']),np.mean(self.fitvalues['mean_b.err'])

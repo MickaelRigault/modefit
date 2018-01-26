@@ -19,7 +19,7 @@ except ImportError:
     raise ImportError("You need to install iminuit: pip install iminuit")
 
 
-from .utils     import make_method
+from .utils     import make_method, is_arraylike
 
 
 ###################################
@@ -636,7 +636,7 @@ class DataSourceHandler( _KFolder_ ):
         be all the known names
         """
         names = self.names if names is None else names
-        if hasattr(names,"__iter__"):
+        if is_arraylike(names):
             return np.asarray([self.data[name_][key] if key in self.data[name_].keys() else default
                     for name_ in names])
         
@@ -873,7 +873,7 @@ class BaseFitter( BaseObject ):
         f = self.fitvalues.copy()
         if nonsymerrors:
             for k,v in f.items():
-                if ".err" in k and "__iter__" not in dir(v):
+                if ".err" in k and not is_arraylike(v):
                     f[k] = [v,v]
             
         return f
@@ -1252,7 +1252,7 @@ class BaseFitter( BaseObject ):
         if not folding:
             # no folding so cleaning the fitvalue
             for k,v in self.fitvalues.items():
-                self.fitvalues[k] = v[0] if hasattr(v,"__iter__") else v
+                self.fitvalues[k] = v[0] if is_arraylike(v) else v
         else:
             for k,v in self.fitvalues.items():
                 self.fitvalues[k] = np.asarray(v)
