@@ -1126,7 +1126,6 @@ class BaseFitter( BaseObject ):
     @property
     def use_minuit(self):
         if self._properties["use_minuit"] is None:
-            warnings.warn("No value set for 'use_minuit' => True is set by default")
             self._properties["use_minuit"] = True
         return self._properties["use_minuit"]
     
