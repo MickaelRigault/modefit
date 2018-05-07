@@ -174,7 +174,7 @@ class BimodalFit( BaseFitter, DataHandler ):
         # -- for the fit
         # use_minuit has a setter
         self.use_minuit = use_minuit
-        self.set_model(eval("Model%s()"%modelname))
+        self.set_model( eval("Model%s()"%modelname) )
 
     def set_data(self,data,errors,proba=None,names=None):
         """ set the information for the fit.
@@ -273,11 +273,11 @@ class ModelBinormal( BaseModel ):
     # - Initial Guesses    
     sigma_a_guess = 0
     sigma_a_fixed = False
-    sigma_a_boundaries = [0,None]
+    sigma_a_boundaries = [1e-30,None]
     
     sigma_b_guess = 0
     sigma_b_fixed = False
-    sigma_b_boundaries = [0,None]
+    sigma_b_boundaries = [1e-30,None]
 
     def setup(self,parameters):
         """ """
@@ -298,7 +298,7 @@ class ModelBinormal( BaseModel ):
         return p * stats.norm.cdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)) + \
                (1-p) * stats.norm.cdf(x,loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2))
                
-    def pdf(self,x, dx, p):
+    def pdf(self, x, dx, p):
         """ return the log likelihood of the given case. See get_loglikelihood """
         return p * stats.norm.pdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)) + \
                (1-p) * stats.norm.pdf(x,loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2))
@@ -334,17 +334,7 @@ class ModelBinormal( BaseModel ):
                 return -np.inf
         return 0
 
-    # ----------------------- #
-    # - Model Particularity - #
-    # ----------------------- #
-    def _minuit_chi2_(self,mean_a,sigma_a,
-                     mean_b,sigma_b):
-        """
-        """
-        parameter = mean_a,sigma_a,mean_b,sigma_b
-        return self.get_chi2(parameter)
-
-
+    
     # ================== #
     #   Properties       #
     # ================== #

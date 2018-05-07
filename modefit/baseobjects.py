@@ -664,7 +664,7 @@ class DataSourceHandler( _KFolder_ ):
     @property
     def _orig_names(self):
         """ """
-        return self.data.keys()
+        return list(self.data.keys())
 
     @property
     def npoints(self):
@@ -1121,7 +1121,7 @@ class BaseFitter( BaseObject ):
         return self._derived_properties["fitvalues"]
 
     def has_fit_run(self):
-        return len(self.fitvalues.keys())>0
+        return len(list(self.fitvalues.keys()))>0
 
     @property
     def use_minuit(self):
@@ -1149,7 +1149,7 @@ class BaseFitter( BaseObject ):
     
     def is_input_set(self):
         """ Test if you set the parameters inputs """
-        return len(self.param_input.keys())>0
+        return len(list(self.param_input.keys()))>0
     
     @property
     def paramguess(self):
