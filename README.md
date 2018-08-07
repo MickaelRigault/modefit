@@ -13,6 +13,18 @@ Once a fitter object is loaded: (see below) simply:
    
 The fitter objects also have a `show()` method in which you can choose to show the best fit or the mcmc samples on top on the data.
 
+# Installation
+
+`pip install modefit` (favored)
+
+or 
+
+```bash
+git pull https://github.com/MickaelRigault/modefit.git
+cd modefit
+python setup.py install
+```
+
 
 ### Current Models
 Currently, the following models are implemented:
