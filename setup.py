@@ -31,6 +31,11 @@ def check_dependencies():
     except ImportError:
         install_requires.append('propobject')
 
+    try:
+        import iminuit
+    except ImportError:
+        install_requires.append('minuit')
+        
     return install_requires
 
 if __name__ == "__main__":
