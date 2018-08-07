@@ -26,4 +26,4 @@ Currently, the following models are implemented:
 
 * iminuit (>1.1)
 * propobject (>=0.1)
-* emcee (>=2.0)
+* emcee (>=2.0) _not mandatory if only fitting_
