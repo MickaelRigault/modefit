@@ -406,6 +406,27 @@ class ModelFloatingBinormal( ModelBinormal ):
         parameter = mean_a,sigma_a,mean_b,sigma_b, proba_a
         return self.get_chi2(parameter)
 
+
+class ModelAssymBinormal( ModelBinormal ):
+    """ """
+    FREEPARAMETERS = ["mean_a","sigma_a",
+                      "mean_b","sigma_b","relat_ampl"]
+        
+    relat_ampl_guess = 0.5
+    relat_ampl_boundaries=[0.00000001,0.99999999]
+    
+    def setup(self, parameters):
+        """ """
+        self.mean_a, self.sigma_a, self.mean_b, self.sigma_b, self.relat_ampl = parameters
+    
+    def pdf(self, x, dx, p):
+        """ return the log likelihood of the given case. See get_loglikelihood """
+        
+        return p * stats.norm.pdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2)) + \
+               (1-p) * \
+        (self.relat_ampl * stats.norm.pdf(x,loc=self.mean_a,scale=np.sqrt(self.sigma_a**2 + dx**2))+
+         (1-self.relat_ampl) * stats.norm.pdf(x,loc=self.mean_b,scale=np.sqrt(self.sigma_b**2 + dx**2)))
+
 # ========================== #
 #                            #
 #   Step                     #

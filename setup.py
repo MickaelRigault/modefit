@@ -10,8 +10,8 @@ MAINTAINER = 'Mickael Rigault'
 MAINTAINER_EMAIL = 'mrigault@physik.hu-berlin.de'
 URL = 'https://github.com/MickaelRigault/modefit/'
 LICENSE = 'BSD (3-clause)'
-DOWNLOAD_URL = 'https://github.com/MickaelRigault/modefit/tarball/0.2'
-VERSION = '0.2.4'
+DOWNLOAD_URL = 'https://github.com/MickaelRigault/modefit/tarball/0.3'
+VERSION = '0.3.0'
 
 try:
     from setuptools import setup, find_packages
@@ -34,7 +34,7 @@ def check_dependencies():
     try:
         import iminuit
     except ImportError:
-        install_requires.append('minuit')
+        install_requires.append('iminuit')
         
     return install_requires
 

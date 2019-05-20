@@ -269,7 +269,7 @@ class MCMC( BaseObject ):
             for ax in axes]
             
         fig.figout(savefile=savefile, show=show)
-
+        return fig
     # ---------- #
     #  Walkers   #
     # ---------- #
@@ -307,7 +307,7 @@ class MCMC( BaseObject ):
                         show_titles=True,label_kwargs={"fontsize":"xx-large"},**kwargs)
 
         fig.figout(savefile=savefile, show=show)
-        
+        return fig
     # ========================= #
     #   Properties              #
     # ========================= #
@@ -452,7 +452,6 @@ class MCMC( BaseObject ):
     def nsamples(self):
         """ number of samples avialable (burnin removed) """
         return len(self.samples)
-
 
     @property
     def derived_values(self):
@@ -786,10 +785,7 @@ class BaseFitter( BaseObject ):
         """
         return self.data - self.get_model(self._fitparams if parameters is None else parameters)
     
-        
-
-        
-    def get_modelchi2(self,parameters):
+    def get_modelchi2(self, parameters):
         """ get the associated -2 log Likelihood
 
         This should usually be passed to the model with loading it.
@@ -807,7 +803,11 @@ class BaseFitter( BaseObject ):
         float (-2*log(likelihood))
         """
         self.model.setup(parameters)
-        return -2 * self.model.get_loglikelihood(*self._get_model_args_())
+        if hasattr(self.model, "get_logprob"):
+            # Well structured, with priors and stuff. Should be mandatory soon
+            return -2 * self.model.get_logprob(*self._get_model_args_())
+        else:
+            return -2 * self.model.get_loglikelihood(*self._get_model_args_())
 
     
     # --------------------- #
@@ -835,10 +835,10 @@ class BaseFitter( BaseObject ):
             raise ValueError(" You must define a 'get_modelchi2()' method in your fitter.")
         self.setup_guesses(**kwargs)
 
-    def get_model(self,parameters):
+    def get_model(self, *args):
         """ call the model.get_model() method
         """
-        return self.model.get_model(parameters)
+        return self.model.get_model(*args)
     
     # --------------------- #
     # -- Ouput Returns   -- #
@@ -1105,7 +1105,7 @@ class BaseFitter( BaseObject ):
         size of the datapoint - number of non-fixed parameters 
         """
         if not hasattr(self, "npoints"):
-            raise AttributeError("npoints not define in this model")
+            raise AttributeError("npoints not define in this fitter")
         if not self.is_model_set():
             raise AttributeError("No model defined")
         
