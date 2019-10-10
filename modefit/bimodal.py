@@ -489,10 +489,10 @@ class StepFit( BimodalFit ):
         """
         # -- Init Tests -- #
         if len(x) != len(data):
-            raise ValueErrors("x and data must have the sample size (%d vs. %d)"%(len(x),len(data)))
+            raise ValueError("x and data must have the sample size (%d vs. %d)"%(len(x),len(data)))
         
         if dx is not None and len(x) != len(dx):
-            raise ValueErrors("x and dx must have the sample size (%d vs. %d). Give dx=None not to use it"%(len(x),len(dx)))
+            raise ValueError("x and dx must have the sample size (%d vs. %d). Give dx=None not to use it"%(len(x),len(dx)))
 
         # ----------------------- #
         # -- The x Information -- #
@@ -589,7 +589,7 @@ class StepFit( BimodalFit ):
         # =================
         if axes is not None:
             if len(axes) != 3:
-                raise ValueErrors("the input 'axes' must be a 3d-array"+\
+                raise ValueError("the input 'axes' must be a 3d-array"+\
                                   " (ax,axhistx,axhisty)")
             ax,axhistx,axhisty = axes
             fig = ax.figure
