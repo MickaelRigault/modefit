@@ -160,7 +160,7 @@ class UnimodalFit( BaseFitter, DataHandler ):
         # ------------------------ #
         # -- Fatal Input Errors -- #        
         if len(errors)!= len(data):
-            raise ValueErrors("data and errors must have the same size")
+            raise ValueError("data and errors must have the same size")
         
         # -- Warning -- #
         if names is not None and len(names) != len(data):
