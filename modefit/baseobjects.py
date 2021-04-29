@@ -894,7 +894,7 @@ class BaseFitter( BaseObject ):
             raise AttributeError("You should fit first !")
 
         for name in self.model.freeparameters:
-            if tested_parameters is not "all" and name not in tested_parameters:
+            if tested_parameters != "all" and name not in tested_parameters:
                 continue
             lowerbound,higherbound = eval("self.model.%s_boundaries"%name)
             if lowerbound is not None and \
@@ -1337,10 +1337,10 @@ class BaseModel( BaseObject ):
              "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
              "    return self.get_chi2(parameters)\n")
 
-        exec("@make_method(BaseModel)\n"+\
-             "def _minuit_lnprob_(self,%s): \n"%(", ".join(obj.FREEPARAMETERS))+\
-             "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
-             "    return self.lnprob(parameters)\n")
+        #exec("@make_method(BaseModel)\n"+\
+        #     "def _minuit_lnprob_(self,%s): \n"%(", ".join(obj.FREEPARAMETERS))+\
+        #     "    parameters = %s \n"%(", ".join(obj.FREEPARAMETERS))+\
+        #     "    return self.lnprob(parameters)\n")
 
         return obj
     
