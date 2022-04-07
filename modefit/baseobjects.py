@@ -875,7 +875,7 @@ class BaseFitter(BaseObject):
         """ call the model.get_model() method
         """
         return self.model.get_model(*args)
-    
+
     # --------------------- #
     # -- Ouput Returns   -- #
     # --------------------- #
@@ -1267,8 +1267,9 @@ class BaseFitter(BaseObject):
         """ coveriance matrix after the fit """
 
         if self.use_minuit:
-            if self._migrad_output_[0]["is_valid"]:
-                return self.model._read_hess_(np.asarray(self.minuit.matrix()))
+            if self._migrad_output_.valid:
+                return self.model._read_hess_(np.asarray(
+                    self.minuit.covariance))
             else:
                 fakeMatrix = np.zeros(
                     (len(self._fitparams), len(self._fitparams)))
@@ -1323,7 +1324,7 @@ class BaseFitter(BaseObject):
             print("STARTS MINUIT FIT")
         self._migrad_output_ = self.minuit.migrad()
 
-        if self._migrad_output_[0]["is_valid"] is False:
+        if self._migrad_output_.valid is False:
             warnings.warn("migrad is not valid")
             self.fitOk = False
         elif verbose:
@@ -1342,13 +1343,14 @@ class BaseFitter(BaseObject):
         minuit_kwargs = {}
         for param in self.model.freeparameters:
             minuit_kwargs[param] = self.param_input["%s_guess" % param]
-            minuit_kwargs["limit_" +
-                          param] = self.param_input["%s_boundaries" % param]
-            minuit_kwargs["fix_"+param] = self.param_input["%s_fixed" % param]
 
         self.minuit = Minuit(self.model._minuit_chi2_,
-                             errordef=step,
                              **minuit_kwargs)
+        self.minuit.errordef = step
+
+        for param in self.model.freeparameters:
+            self.minuit.limits = self.param_input["%s_boundaries" % param]
+            self.minuit.fixed[param] = self.param_input["%s_fixed" % param]
     # ----------------
     #  Scipy
     # ----------------
