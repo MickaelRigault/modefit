@@ -1,0 +1,6 @@
+
+build/lib/modefit/
+
+dist/
+
+modefit.egg-info/
