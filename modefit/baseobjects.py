@@ -1329,9 +1329,8 @@ class BaseFitter(BaseObject):
             self.fitOk = False
         elif verbose:
             self.fitOk = True
-
-        self._fitparams = np.asarray([self.minuit.values[k]
-                                      for k in self.model.freeparameters])
+        values = self.minuit.values
+        self._fitparams = np.asarray([values[k] for k in self.model.freeparameters])
 
     def _setup_minuit_(self, step=1):
         """
@@ -1340,16 +1339,16 @@ class BaseFitter(BaseObject):
             self.setup_guesses()
 
         # == Minuit Keys == #
-        minuit_kwargs = {}
+        values = {}
         for param in self.model.freeparameters:
-            minuit_kwargs[param] = self.param_input["%s_guess" % param]
+            values[param] = self.param_input["%s_guess" % param]
 
         self.minuit = Minuit(self.model._minuit_chi2_,
-                             **minuit_kwargs)
+                             **values)
+        
         self.minuit.errordef = step
-
         for param in self.model.freeparameters:
-            self.minuit.limits = self.param_input["%s_boundaries" % param]
+            self.minuit.limits[param] = self.param_input["%s_boundaries" % param]
             self.minuit.fixed[param] = self.param_input["%s_fixed" % param]
     # ----------------
     #  Scipy
