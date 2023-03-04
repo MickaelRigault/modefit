@@ -1,6 +1,6 @@
 """ Classes and Functions allowing advance fitting techniques. """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .unimodal import *
 from .bimodal  import *
